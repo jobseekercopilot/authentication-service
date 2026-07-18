@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class JwtTokenProviderTest {
 
     private JwtTokenProvider jwtTokenProvider;
-    private final String secret = "thisisaverylongsecretkeythatmustbeatleast32byteslong";
+    private final String secret = "00000000000000000000000000000000";
     private final long expiration = 3600000; // 1 hour
 
     @BeforeEach

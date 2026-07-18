@@ -1,8 +1,11 @@
 package com.jobseekercopilot.authenticationservice.controller;
 
 import com.jobseekercopilot.authenticationservice.exception.BadRequestException;
+import com.jobseekercopilot.authenticationservice.exception.UnauthorizedException;
 import com.jobseekercopilot.authenticationservice.model.*;
 import com.jobseekercopilot.authenticationservice.service.AuthService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,8 +24,14 @@ public class AuthController {
     }
 
     @GetMapping("/me")
+    @Operation(summary = "Get current authenticated user", description = "Returns the user account details for the currently authenticated user based on the JWT token provided in the Authorization header.")
+    @Tag(name = "Authentication")
     public ResponseEntity<UserAccountResponse> getCurrentUser(
-            @RequestHeader("Authorization") String authHeader) {
+            @RequestHeader(name = "Authorization", required = false) String authHeader) {
+
+        if (authHeader == null || !authHeader.startsWith("Bearer ") || authHeader.length() == 7) {
+            throw new UnauthorizedException("A Bearer token is required");
+        }
 
         String token = authHeader.substring(7);
         String userId = authService.validate(token);
@@ -33,6 +42,8 @@ public class AuthController {
     }
 
     @PostMapping("/register")
+    @Operation(summary = "Register a new user", description = "Registers a new user account with the provided details. Returns a success message on completion.")
+    @Tag(name = "Authentication")
     public ResponseEntity<Map<String, String>> register(@RequestBody RegisterRequest request) {
         authService.register(request);
         Map<String, String> response = new HashMap<>();
@@ -41,6 +52,8 @@ public class AuthController {
     }
 
     @PostMapping("/login")
+    @Operation(summary = "Authenticate user and get JWT token", description = "Authenticates a user with username and password credentials. Returns a JWT token and user details upon successful authentication.")
+    @Tag(name = "Authentication")
     public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
         LoginResponse response = authService.login(request);
         return ResponseEntity.ok(response);

@@ -39,14 +39,7 @@ class AuthenticationServiceIntegrationTest {
 
         // Get current user with token
         String token = (String) loginResponse.getBody().get("token");
-        ResponseEntity<Map> meResponse = restTemplate.getForEntity(
-                "/api/auth/me?token=" + token, Map.class);
 
-        // Note: /api/auth/me reads from Authorization header
-        ResponseEntity<Map> meResponseWithHeader = restTemplate.getForEntity(
-                "/api/auth/me", Map.class, "Authorization", "Bearer " + token);
-
-        // Actually let's just make a proper request
         var headers = new org.springframework.http.HttpHeaders();
         headers.set("Authorization", "Bearer " + token);
         var requestEntity = new org.springframework.http.HttpEntity<>(headers);
