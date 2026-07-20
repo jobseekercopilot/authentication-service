@@ -1,7 +1,6 @@
 package com.jobseekercopilot.authenticationservice.controller;
 
-import com.jobseekercopilot.authenticationservice.exception.BadRequestException;
-import com.jobseekercopilot.authenticationservice.exception.UnauthorizedException;
+import com.jobseekercopilot.authenticationservice.exception.TokenValidationException;
 import com.jobseekercopilot.authenticationservice.model.*;
 import com.jobseekercopilot.authenticationservice.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -30,7 +29,7 @@ public class AuthController {
             @RequestHeader(name = "Authorization", required = false) String authHeader) {
 
         if (authHeader == null || !authHeader.startsWith("Bearer ") || authHeader.length() == 7) {
-            throw new UnauthorizedException("A Bearer token is required");
+            throw TokenValidationException.required();
         }
 
         String token = authHeader.substring(7);

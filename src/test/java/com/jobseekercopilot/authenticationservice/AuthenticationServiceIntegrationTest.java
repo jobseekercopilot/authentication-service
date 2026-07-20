@@ -2,14 +2,22 @@ package com.jobseekercopilot.authenticationservice;
 
 import com.jobseekercopilot.authenticationservice.model.LoginRequest;
 import com.jobseekercopilot.authenticationservice.model.RegisterRequest;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Date;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -21,6 +29,9 @@ import static org.junit.jupiter.api.Assertions.*;
 })
 @AutoConfigureTestRestTemplate
 class AuthenticationServiceIntegrationTest {
+
+    private static final String TEST_SIGNING_KEY =
+            "test-only-signing-material-never-use-for-local-runtime";
 
     @Autowired
     private TestRestTemplate restTemplate;
@@ -112,6 +123,90 @@ class AuthenticationServiceIntegrationTest {
         assertEquals(HttpStatus.TOO_MANY_REQUESTS, threshold.getStatusCode());
         assertEquals("Too many authentication attempts. Try again later.", threshold.getBody().get("message"));
         assertNotNull(threshold.getHeaders().getFirst("Retry-After"));
+    }
+
+    @Test
+    void missingTokenReturnsVersionedCorrelatedError() {
+        String correlationId = "auth-07-missing-token";
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Correlation-Id", correlationId);
+
+        ResponseEntity<Map> response = restTemplate.exchange(
+                "/api/auth/me", HttpMethod.GET, new HttpEntity<>(headers), Map.class);
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertEquals("1", response.getBody().get("schemaVersion"));
+        assertEquals("TOKEN_REQUIRED", response.getBody().get("code"));
+        assertEquals("A Bearer token is required.", response.getBody().get("message"));
+        assertEquals(correlationId, response.getBody().get("correlationId"));
+        assertEquals(correlationId, response.getHeaders().getFirst("X-Correlation-Id"));
+    }
+
+    @Test
+    void malformedJsonReturnsStableBadRequestWithoutParserDetails() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        ResponseEntity<Map> response = restTemplate.exchange(
+                "/api/auth/login", HttpMethod.POST,
+                new HttpEntity<>("{not-json", headers), Map.class);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals("MALFORMED_JSON", response.getBody().get("code"));
+        assertEquals("Request body is not valid JSON.", response.getBody().get("message"));
+        assertFalse(response.getBody().toString().contains("JsonParseException"));
+        assertFalse(response.getBody().toString().contains("not-json"));
+    }
+
+    @Test
+    void expiredTokenReturnsStableUnauthorizedErrorWithoutParserDetails() {
+        var key = Keys.hmacShaKeyFor(TEST_SIGNING_KEY.getBytes(StandardCharsets.UTF_8));
+        Date now = new Date();
+        String token = Jwts.builder()
+                .subject("expired-user")
+                .issuedAt(new Date(now.getTime() - 2_000))
+                .expiration(new Date(now.getTime() - 1_000))
+                .signWith(key)
+                .compact();
+
+        assertTokenFailure(token, "TOKEN_EXPIRED", "The authentication token has expired.");
+    }
+
+    @Test
+    void malformedTokenReturnsStableUnauthorizedErrorWithoutParserDetails() {
+        assertTokenFailure("not-a-jwt", "TOKEN_MALFORMED", "The authentication token is malformed.");
+    }
+
+    @Test
+    void unsupportedUnsignedTokenReturnsStableUnauthorizedErrorWithoutParserDetails() {
+        String token = Jwts.builder().subject("unsupported-user").compact();
+
+        assertTokenFailure(token, "TOKEN_UNSUPPORTED", "The authentication token is unsupported.");
+    }
+
+    @Test
+    void differentlySignedTokenReturnsStableUnauthorizedError() {
+        String token = Jwts.builder()
+                .subject("other-key-user")
+                .expiration(new Date(System.currentTimeMillis() + 60_000))
+                .signWith(Keys.hmacShaKeyFor(
+                        "different-test-only-signing-material-never-use-locally".getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertTokenFailure(token, "TOKEN_INVALID", "The authentication token is invalid.");
+    }
+
+    private void assertTokenFailure(String token, String expectedCode, String expectedMessage) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        ResponseEntity<Map> response = restTemplate.exchange(
+                "/api/auth/me", HttpMethod.GET, new HttpEntity<>(headers), Map.class);
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertEquals(expectedCode, response.getBody().get("code"));
+        assertEquals(expectedMessage, response.getBody().get("message"));
+        assertNotNull(response.getBody().get("correlationId"));
+        assertFalse(response.getBody().toString().contains(token));
+        assertFalse(response.getBody().toString().contains("io.jsonwebtoken"));
     }
 
     private ResponseEntity<Map> login(String email, String password) {

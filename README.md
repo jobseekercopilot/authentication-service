@@ -36,6 +36,26 @@ The local key belongs only in the ignored `.env` file generated below.
 - `GET /api/auth/me` with bearer token
 - `/v3/api-docs`, `/swagger-ui/index.html`, `/actuator/health`
 
+Failures use a stable version 1 JSON contract:
+
+```json
+{
+  "schemaVersion": "1",
+  "code": "TOKEN_EXPIRED",
+  "message": "The authentication token has expired.",
+  "correlationId": "<X-Correlation-Id response value>",
+  "timestamp": "<UTC timestamp>"
+}
+```
+
+Missing, expired, malformed, unsupported and invalid tokens return `401` with
+`TOKEN_REQUIRED`, `TOKEN_EXPIRED`, `TOKEN_MALFORMED`, `TOKEN_UNSUPPORTED` and
+`TOKEN_INVALID`. Credential failures remain uniformly
+`AUTHENTICATION_FAILED`; validation, conflict, throttling and unexpected errors
+use `REQUEST_VALIDATION_FAILED`, `ACCOUNT_ALREADY_EXISTS`,
+`TOO_MANY_AUTHENTICATION_ATTEMPTS` and `INTERNAL_ERROR`. Parser messages,
+exception causes, credentials and complete tokens are never returned.
+
 ```bash
 mvn -B verify
 ./scripts/test-dependency-report-policy.sh
@@ -90,7 +110,9 @@ Use `feature/* → develop`; `main` will be added later as a release branch. A
 startup failure mentioning `jwt.signing-key` means `JWT_SIGNING_KEY` was not
 supplied or was too weak. Authentication failures must be diagnosed through
 correlation IDs, never by logging emails, passwords, signing keys or complete
-tokens. Do not raise login thresholds casually: lower values increase denial-of-
+tokens. Use the response `code` for client behavior and the correlation ID for
+diagnosis; messages are safe display text rather than internal diagnostics. Do
+not raise login thresholds casually: lower values increase denial-of-
 service risk, while higher values allow more automated guesses.
 
 ## Licence
