@@ -1,10 +1,10 @@
 # Authentication Service
 
-Spring Boot service for account registration, BCrypt password verification,
+Spring Boot service for account registration, adaptive password verification,
 JWT access-token issue and current-account lookup.
 
-> Beta status: not beta-ready. Token lifecycle, brute-force protection,
-> production persistence and dependency remediation are blockers. See
+> Beta status: not beta-ready. Token lifecycle and production persistence
+> remain blockers. See
 > [the audit](docs/BETA_READINESS_AUDIT.md).
 
 ## Requirements and configuration
@@ -20,6 +20,10 @@ JWT access-token issue and current-account lookup.
 | `AUTH_DB_URL` | local file H2 | Local-only account database |
 | `JWT_SIGNING_KEY` | none; required | Access-token signing key (minimum 32 UTF-8 bytes) |
 | `jwt.expiration` | `86400000` | Temporary access-token lifetime (ms) |
+| `AUTH_LOGIN_MAXIMUM_FAILURES` | `10` | Failed logins allowed per normalized principal and attempt window |
+| `AUTH_LOGIN_ATTEMPT_WINDOW` | `15m` | Window in which failed logins accumulate |
+| `AUTH_LOGIN_LOCK_DURATION` | `15m` | Automatic recovery delay after the threshold |
+| `AUTH_LOGIN_MAXIMUM_TRACKED_PRINCIPALS` | `10000` | Memory bound for locally tracked principals |
 
 There is no fallback signing key. Missing, blank and weak values fail startup
 without echoing key material. Never reuse the compromised historical value.
@@ -47,6 +51,20 @@ authentication container. `.env.example` contains only a deliberately blank
 placeholder. Tests use separate, clearly non-runtime signing material under
 `src/test`; CI therefore does not need a persistent signing-key secret.
 
+Registration accepts passwords containing 15–128 Unicode code points and does
+not impose composition rules. Common compromised values and values based on
+account details are rejected locally; passwords are never sent to a third-party
+checking service. New passwords use PBKDF2, while a successful login with a
+legacy BCrypt hash transparently upgrades that hash. Login failures do not
+disclose whether an account exists or is inactive.
+
+Failed logins are tracked by a SHA-256 digest of the normalized email, not the
+email itself. The local service blocks at the configured threshold and returns
+HTTP `429` with `Retry-After`; access recovers automatically after the lock
+duration. This is a per-process safety control, so a future horizontally scaled
+deployment also requires an owner-approved shared limiter. See
+[credential security](docs/CREDENTIAL_SECURITY.md) for policy and trade-offs.
+
 To rotate the local key, stop the Compose service, remove or archive `.env`
 outside the repository, rerun the generator, and recreate the container.
 Replacing the key invalidates every existing local JWT, so developers must log
@@ -71,7 +89,9 @@ process are documented in
 Use `feature/* → develop`; `main` will be added later as a release branch. A
 startup failure mentioning `jwt.signing-key` means `JWT_SIGNING_KEY` was not
 supplied or was too weak. Authentication failures must be diagnosed through
-correlation IDs, never by logging passwords, signing keys or complete tokens.
+correlation IDs, never by logging emails, passwords, signing keys or complete
+tokens. Do not raise login thresholds casually: lower values increase denial-of-
+service risk, while higher values allow more automated guesses.
 
 ## Licence
 

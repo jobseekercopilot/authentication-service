@@ -1,14 +1,14 @@
 package com.jobseekercopilot.authenticationservice.service;
 
-import com.jobseekercopilot.authenticationservice.exception.BadRequestException;
 import com.jobseekercopilot.authenticationservice.exception.ConflictException;
+import com.jobseekercopilot.authenticationservice.exception.LoginRateLimitException;
 import com.jobseekercopilot.authenticationservice.exception.ResourceNotFoundException;
 import com.jobseekercopilot.authenticationservice.exception.UnauthorizedException;
 import com.jobseekercopilot.authenticationservice.model.*;
 import com.jobseekercopilot.authenticationservice.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -18,42 +18,38 @@ import java.util.UUID;
 public class AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
+    private static final String INVALID_CREDENTIALS = "Invalid email or password.";
+    private static final String DUMMY_PASSWORD = "authentication-timing-placeholder";
 
     private final UserRepository userRepository;
-    private final BCryptPasswordEncoder passwordEncoder;
+    private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final PasswordPolicy passwordPolicy;
+    private final LoginAttemptService loginAttemptService;
+    private final String dummyPasswordHash;
 
     public AuthService(
             UserRepository userRepository,
-            BCryptPasswordEncoder passwordEncoder,
-            JwtTokenProvider jwtTokenProvider) {
+            PasswordEncoder passwordEncoder,
+            JwtTokenProvider jwtTokenProvider,
+            PasswordPolicy passwordPolicy,
+            LoginAttemptService loginAttemptService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.passwordPolicy = passwordPolicy;
+        this.loginAttemptService = loginAttemptService;
+        this.dummyPasswordHash = passwordEncoder.encode(DUMMY_PASSWORD);
     }
 
     public void register(RegisterRequest request) {
         long startedAt = System.nanoTime();
         log.info("Registration request validation started hasRequest={}", request != null);
-        if (request == null || request.getEmail() == null || request.getPassword() == null) {
-            throw new BadRequestException("Missing email or password.");
-        }
+        passwordPolicy.validateRegistration(request);
 
-        String name = request.getName();
+        String name = request.getName().trim();
         String email = request.getEmail().trim();
         String password = request.getPassword();
-
-        if (email.isEmpty() || password.isEmpty() || name.isEmpty()) {
-            throw new BadRequestException("Email, name or password cannot be empty.");
-        }
-
-        if (!email.contains("@")) {
-            throw new BadRequestException("Invalid email format.");
-        }
-
-        if (password.length() < 4) {
-            throw new BadRequestException("Password must be at least 4 characters long.");
-        }
 
         if (userRepository.findByEmail(email).isPresent()) {
             log.warn("Registration rejected reason=EmailAlreadyExists durationMs={}",
@@ -80,37 +76,39 @@ public class AuthService {
     public LoginResponse login(LoginRequest request) {
         long startedAt = System.nanoTime();
         log.info("Login request validation started hasRequest={}", request != null);
-        if (request == null || request.getEmail() == null || request.getPassword() == null) {
-            throw new BadRequestException("Missing email or password.");
+        String email = request == null || request.getEmail() == null ? "" : request.getEmail().trim();
+        String password = request == null || request.getPassword() == null ? "" : request.getPassword();
+
+        long retryAfter = loginAttemptService.retryAfterSecondsIfBlocked(email);
+        var user = email.isEmpty() ? java.util.Optional.<User>empty() : userRepository.findByEmail(email);
+        String storedHash = user.map(User::getPasswordHash).orElse(dummyPasswordHash);
+        boolean passwordMatches = passwordEncoder.matches(password, storedHash);
+
+        if (retryAfter > 0) {
+            log.warn("Login rate limited durationMs={}", (System.nanoTime() - startedAt) / 1_000_000);
+            throw new LoginRateLimitException(retryAfter);
         }
 
-        String email = request.getEmail().trim();
-        String password = request.getPassword();
-
-        if (email.isEmpty() || password.isEmpty()) {
-            throw new BadRequestException("Email and password cannot be empty.");
-        }
-
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UnauthorizedException("Invalid credentials. Check email and try again."));
-
-        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
-            log.warn("Login rejected userId={} reason=InvalidPassword durationMs={}",
-                    user.getId(),
+        if (user.isEmpty() || !passwordMatches || !user.get().isActive()) {
+            long blockedFor = loginAttemptService.recordFailure(email);
+            log.warn("Login rejected reason=InvalidCredentials durationMs={}",
                     (System.nanoTime() - startedAt) / 1_000_000);
-            throw new UnauthorizedException("Invalid credentials. Check password and try again.");
+            if (blockedFor > 0) {
+                throw new LoginRateLimitException(blockedFor);
+            }
+            throw new UnauthorizedException(INVALID_CREDENTIALS);
         }
 
-        if (!user.isActive()) {
-            log.warn("Login rejected userId={} reason=InactiveAccount durationMs={}",
-                    user.getId(),
-                    (System.nanoTime() - startedAt) / 1_000_000);
-            throw new UnauthorizedException("Account is inactive.");
+        User authenticatedUser = user.get();
+        loginAttemptService.recordSuccess(email);
+        if (!storedHash.startsWith("{") || passwordEncoder.upgradeEncoding(storedHash)) {
+            authenticatedUser.setPasswordHash(passwordEncoder.encode(password));
+            userRepository.save(authenticatedUser);
         }
 
-        String token = jwtTokenProvider.generateToken(user.getId());
+        String token = jwtTokenProvider.generateToken(authenticatedUser.getId());
         log.info("Login succeeded userId={} durationMs={}",
-                user.getId(),
+                authenticatedUser.getId(),
                 (System.nanoTime() - startedAt) / 1_000_000);
         return new LoginResponse(token);
     }

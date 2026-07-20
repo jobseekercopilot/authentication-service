@@ -29,3 +29,12 @@ findings fail the build. Any temporary exception requires private owner review,
 a tracking issue and an expiry of no more than 30 days; see
 `docs/DEPENDENCY_SECURITY.md`. There are currently no accepted dependency
 findings.
+
+Credential handling follows `docs/CREDENTIAL_SECURITY.md`: 15–128 Unicode code
+points, a local compromised-password blocklist, PBKDF2 for new hashes and
+transparent BCrypt migration. Authentication failures are deliberately uniform.
+Repeated failures are temporarily limited using a digest of the normalized
+principal; the service must not log that principal, the supplied password, or
+the reason an individual login failed. The in-memory limiter is a local-runtime
+control, not a substitute for a shared edge/service limiter in a scaled
+deployment.
