@@ -1,0 +1,9 @@
+services:
+  authentication-service:
+    build:
+      context: .
+    ports:
+      - "${AUTH_PORT:-8084}:8084"
+    environment:
+      JWT_SIGNING_KEY: "${JWT_SIGNING_KEY:?Run ./scripts/generate-local-signing-key.sh first}"
+      AUTH_DB_URL: "jdbc:h2:mem:auth-local;DB_CLOSE_DELAY=-1"

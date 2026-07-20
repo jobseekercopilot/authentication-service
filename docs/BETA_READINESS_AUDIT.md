@@ -13,8 +13,10 @@ Gitleaks found a generic API credential in the public root history at `.env`
 tokens in authentication documentation/tests. The current authentication
 configuration also contained a hard-coded JWT signing value. Imported private
 history was rewritten to require `JWT_SECRET`; no value is reproduced here.
-Any real credential represented by the public `.env` or deployed signing value
-must be rotated by the owner.
+The owner confirmed that no AWS/application environment, production user or
+production JWT currently exists. The historical key is permanently compromised
+and must not be restored. AUTH-01 replaces local runtime material only; AWS and
+production secret management remain outside the current system and scope.
 
 The integration test could not bind an ephemeral socket in the restricted
 sandbox; the approved host-network rerun then passed all 16 tests.
@@ -41,3 +43,22 @@ result is a blocking, incomplete security baseline—not a clean scan.
 | [AUTH-09](https://github.com/jobseekercopilot/authentication-service/issues/9) | Expand security and integration testing | No rate-limit, enumeration, cross-service auth, revocation, production-config or migration tests exist. | **High / P1 testing:** high-risk controls lack regression evidence. | Add unit/integration/contract/security tests plus full path coverage; run network-binding integration in CI. | AUTH-02–08. | Yes | L |
 | [AUTH-10](https://github.com/jobseekercopilot/authentication-service/issues/10) | Harden container and documentation | Docker skips tests, runs as root on mutable images; README claims RBAC/CORS/Spring Security and MIT licensing that source does not implement. | **Medium / P1 devops/docs:** unsafe image defaults and misleading security claims. | Pin/scan images, use non-root, health check, graceful shutdown, run verify, and document actual config/operations/proprietary licence. | AUTH-05. | Yes | M |
 | [AUTH-11](https://github.com/jobseekercopilot/authentication-service/issues/11) | Triage vulnerable dependencies and establish a reliable security gate | OWASP Dependency-Check reported 10 affected dependency records, including 17 Critical and 38 High entries before triage; two feed records failed processing, OSS Index lacked authentication, and CI only emits `mvn dependency:tree`. | **High / P1 dependency:** an authentication-facing vulnerable library can reach beta, while an incomplete feed can create false assurance. | Upgrade the Spring Boot/dependency baseline; triage duplicates, reachability and false positives with evidence; configure authenticated/cached advisory data; publish a machine-readable report; fail on unaccepted Critical/High findings and document risk acceptance. | Platform CI, advisory-feed and dependency-upgrade decisions. | Yes | L |
+
+## AUTH-01 remediation evidence
+
+- Runtime configuration uses required `JWT_SIGNING_KEY`; no source fallback or
+  hard-coded runtime value exists.
+- Missing, blank and values shorter than 32 UTF-8 bytes fail safely without
+  including key material in the error.
+- The local Compose path injects an ignored `.env` value generated without
+  displaying it; `.env.example` is a blank placeholder only.
+- Test-only signing material is isolated under `src/test` and is not reused by
+  the local runtime.
+- Token tests cover current-key success, different-key rejection, expiry and
+  malformed input. Startup/configuration tests cover missing and weak keys.
+- Full Maven, Compose authentication and complete-history secret-scan evidence
+  is recorded in AUTH-01 and its pull request.
+
+This resolves AUTH-01 only. Token/session lifecycle, error mapping, brute-force
+protection, persistence and dependency findings remain open, so the service is
+still **not beta-ready**.

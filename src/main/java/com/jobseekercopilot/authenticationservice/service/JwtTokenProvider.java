@@ -13,14 +13,30 @@ import java.util.Date;
 @Component
 public class JwtTokenProvider {
 
+    static final int MINIMUM_SIGNING_KEY_BYTES = 32;
+
     private final SecretKey key;
     private final long expirationMs;
 
     public JwtTokenProvider(
-            @Value("${jwt.secret}") String secret,
+            @Value("${jwt.signing-key}") String signingKey,
             @Value("${jwt.expiration}") long expirationMs) {
-        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        this.key = createSigningKey(signingKey);
         this.expirationMs = expirationMs;
+    }
+
+    private static SecretKey createSigningKey(String signingKey) {
+        if (signingKey == null || signingKey.isBlank()) {
+            throw new IllegalStateException("JWT signing key must be configured and must not be blank");
+        }
+
+        byte[] keyMaterial = signingKey.getBytes(StandardCharsets.UTF_8);
+        if (keyMaterial.length < MINIMUM_SIGNING_KEY_BYTES) {
+            throw new IllegalStateException(
+                    "JWT signing key must contain at least " + MINIMUM_SIGNING_KEY_BYTES + " bytes");
+        }
+
+        return Keys.hmacShaKeyFor(keyMaterial);
     }
 
     public String generateToken(String userId) {
