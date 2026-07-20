@@ -24,6 +24,35 @@ jobs:
           cache: maven
       - name: Verify
         run: mvn -B verify
+      - name: Test dependency report policy
+        run: ./scripts/test-dependency-report-policy.sh
+      - name: Materialize resolved runtime dependencies
+        run: mvn -B dependency:copy-dependencies -DincludeScope=runtime -DoutputDirectory=target/dependency-scan
+      - name: Scan verified runtime dependencies
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: rootfs
+          scan-ref: target/dependency-scan
+          scanners: vuln
+          vuln-type: library
+          list-all-pkgs: "true"
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          format: json
+          output: target/trivy-dependencies.json
+          exit-code: "0"
+          trivyignores: config/trivy/.trivyignore
+          cache: "true"
+          version: v0.72.0
+      - name: Upload dependency vulnerability report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dependency-vulnerability-report-${{ github.sha }}
+          path: target/trivy-dependencies.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Enforce dependency vulnerability policy
+        run: ./scripts/verify-dependency-report.sh target/trivy-dependencies.json config/trivy/.trivyignore
       - name: Dependency inventory
         if: always()
         run: mvn -B dependency:tree

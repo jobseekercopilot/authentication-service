@@ -1,0 +1,19 @@
+{
+  "SchemaVersion": 2,
+  "ArtifactName": "target/authentication-service-1.0.0.jar",
+  "ArtifactType": "filesystem",
+  "Results": [
+    {
+      "Target": "Java",
+      "Class": "lang-pkgs",
+      "Type": "jar",
+      "Packages": [
+        {
+          "Name": "example-library",
+          "Version": "1.0.0"
+        }
+      ],
+      "Vulnerabilities": []
+    }
+  ]
+}

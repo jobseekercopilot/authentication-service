@@ -22,3 +22,10 @@ owner-approved operational change.
 
 The current code is a beta-readiness baseline, not a security certification.
 Known risks and beta blockers are tracked in `docs/BETA_READINESS_AUDIT.md`.
+
+Resolved runtime dependencies are scanned in CI with pinned Trivy and a
+machine-readable report. Missing/empty reports and unaccepted Critical/High
+findings fail the build. Any temporary exception requires private owner review,
+a tracking issue and an expiry of no more than 30 days; see
+`docs/DEPENDENCY_SECURITY.md`. There are currently no accepted dependency
+findings.
