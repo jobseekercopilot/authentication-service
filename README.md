@@ -34,6 +34,7 @@ The local key belongs only in the ignored `.env` file generated below.
 
 ```bash
 mvn -B verify
+./scripts/test-dependency-report-policy.sh
 ./scripts/generate-local-signing-key.sh
 docker compose up --build --detach
 ./scripts/smoke-test-auth.sh
@@ -57,6 +58,13 @@ in documentation or in logs.
 
 H2, its console and automatic schema update are local-development settings,
 not a production configuration.
+
+CI scans the resolved runtime dependency set with pinned Trivy, uploads a JSON
+report, and fails closed on missing coverage or any unaccepted Critical/High
+finding. The current supported baseline is Spring Boot 4.1.0 with no accepted
+dependency exceptions. Reproduction, ownership and the short-lived exception
+process are documented in
+[the dependency security runbook](docs/DEPENDENCY_SECURITY.md).
 
 ## Branch workflow and troubleshooting
 

@@ -59,6 +59,21 @@ result is a blocking, incomplete security baseline—not a clean scan.
 - Full Maven, Compose authentication and complete-history secret-scan evidence
   is recorded in AUTH-01 and its pull request.
 
-This resolves AUTH-01 only. Token/session lifecycle, error mapping, brute-force
-protection, persistence and dependency findings remain open, so the service is
-still **not beta-ready**.
+## AUTH-11 remediation evidence
+
+- A fresh Trivy `rootfs` scan of all resolved runtime JARs reproduced 4
+  Critical and 28 High findings on the Spring Boot 3.2.0 baseline.
+- The service now uses the supported Spring Boot 4.1.0 BOM, springdoc 3.0.3,
+  JJWT 0.13.0 and Lombok 1.18.46. Boot 4 rest-client APIs use their supported
+  modules and package names.
+- All 26 authentication tests and the Compose registration/login/current-user
+  journey pass after the upgrade.
+- The remediated scan covers 107 Java packages with no Critical or High
+  findings and no accepted exceptions.
+- CI caches current Trivy advisory data, uploads a JSON report, and rejects
+  malformed/empty coverage or unaccepted Critical/High findings. Policy
+  fixtures prove the negative paths and short-lived exception rules.
+
+AUTH-01 and AUTH-11 are resolved. Token/session lifecycle, error mapping,
+brute-force protection and production persistence remain open, so the service
+is still **not beta-ready**.
