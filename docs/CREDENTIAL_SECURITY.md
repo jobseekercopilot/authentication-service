@@ -40,6 +40,19 @@ replicas. Before horizontal scaling or production use, add shared principal and
 network-origin controls at the approved gateway/service boundary, with trusted
 proxy handling, observability and an owner-approved recovery process.
 
+## Safe authentication errors
+
+Authentication failures return a versioned machine-readable code, a safe
+display message and the same correlation ID carried in the response header.
+Token parsing distinctions are limited to required, expired, malformed,
+unsupported and otherwise invalid inputs; every one returns `401`. Unknown
+exceptions return a generic `INTERNAL_ERROR` without their message or cause.
+
+Logs record request metadata, correlation IDs, outcome categories, duration and
+exception class only. They must not contain request/response bodies, email
+addresses, passwords, signing keys, complete JWTs or parser messages. Use a
+correlation ID to connect a client failure to these metadata-only events.
+
 ## Configuration and verification
 
 Docker Compose reads these optional local `.env` settings and injects them into

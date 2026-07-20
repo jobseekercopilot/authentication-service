@@ -1,24 +1,20 @@
 package com.jobseekercopilot.authenticationservice.exception;
 
-import lombok.Getter;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
-@Getter
-public class ErrorResponse {
-    private String message;
-    private LocalDateTime timestamp;
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public record ErrorResponse(
+        String schemaVersion,
+        String code,
+        String message,
+        String correlationId,
+        Instant timestamp) {
 
-    public ErrorResponse(String message) {
-        this.message = message;
-        this.timestamp = LocalDateTime.now();
-    }
+    public static final String SCHEMA_VERSION = "1";
 
-    public void setMessage(String message) {
-        this.message = message;
-    }
-
-    public void setTimestamp(LocalDateTime timestamp) {
-        this.timestamp = timestamp;
+    public ErrorResponse(String code, String message, String correlationId) {
+        this(SCHEMA_VERSION, code, message, correlationId, Instant.now());
     }
 }

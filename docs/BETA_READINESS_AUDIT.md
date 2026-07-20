@@ -38,7 +38,7 @@ result is a blocking, incomplete security baseline—not a clean scan.
 | [AUTH-04](https://github.com/jobseekercopilot/authentication-service/issues/4) | Protect service and environment-data endpoints | The service uses crypto but no Spring Security filter chain; `/internal/system-data` is guarded only by profile/property logic; H2 console and detailed health are enabled. | **High / P1 security:** direct network access can bypass intended gateway controls and expose management/dev functions. | Deny direct public access, authenticate service calls, make internal endpoints separately authorised, disable H2/Swagger/detailed health in production and test the production profile. | Service identity/network design. | Yes | L |
 | [AUTH-05](https://github.com/jobseekercopilot/authentication-service/issues/5) | Replace H2/`ddl-auto=update` with production persistence and migrations | File H2, blank database password, SQL logging and Hibernate auto-update are defaults; no migration files or restore plan exist. | **High / P1 data/reliability:** schema drift, weak durability and accidental credential/PII logging. | Select supported production database, add versioned migrations and constraints, separate local/prod config, test backup/restore and migration from empty/previous schema. | Platform database decision. | Yes | L |
 | [AUTH-06](https://github.com/jobseekercopilot/authentication-service/issues/6) | Canonicalise email identity safely | Registration/login trim but do not lower/canonicalise; database uniqueness is implementation/collation dependent. | **Medium / P1 data:** case variants can create duplicate or inaccessible identities. | Define canonicalisation and display preservation, enforce a canonical unique column and migrate/test case/Unicode/whitespace variants. | Database migration. | Yes | M |
-| [AUTH-07](https://github.com/jobseekercopilot/authentication-service/issues/7) | Return stable non-leaking authentication errors | `validate` wraps token failures in `RuntimeException`; global catch returns `"unexpected" + ex.getMessage()`. | **High / P1 security/API:** invalid tokens can become 500 and leak parser/internal details. | Map known failures to stable 4xx error codes, redact internal causes, add correlation IDs and test malformed/expired/unsupported tokens. | Shared error contract. | Yes | M |
+| [AUTH-07](https://github.com/jobseekercopilot/authentication-service/issues/7) | Return stable non-leaking authentication errors | **Remediated:** known token and request failures map to stable versioned codes with correlation IDs; unknown failures return a redacted 500. | **High / P1 security/API, mitigated:** invalid tokens no longer become leaking parser/internal failures. | Keep version 1 codes backward compatible and use correlation IDs rather than exposing causes. | UMG-04 safe-error pattern complete. | No | M |
 | [AUTH-08](https://github.com/jobseekercopilot/authentication-service/issues/8) | Decide and implement account lifecycle capabilities | Password change/reset, logout/revocation, deletion and retention/export flows are absent. | **High / P1 functional/privacy:** controlled-beta account support and deletion obligations are undefined. | Record beta decisions; implement required endpoints with re-authentication, audit events and tests, or explicitly defer with accepted risk/runbook. | AUTH-03 and privacy decision. | Yes | L |
 | [AUTH-09](https://github.com/jobseekercopilot/authentication-service/issues/9) | Expand security and integration testing | No rate-limit, enumeration, cross-service auth, revocation, production-config or migration tests exist. | **High / P1 testing:** high-risk controls lack regression evidence. | Add unit/integration/contract/security tests plus full path coverage; run network-binding integration in CI. | AUTH-02–08. | Yes | L |
 | [AUTH-10](https://github.com/jobseekercopilot/authentication-service/issues/10) | Harden container and documentation | Docker skips tests, runs as root on mutable images; README claims RBAC/CORS/Spring Security and MIT licensing that source does not implement. | **Medium / P1 devops/docs:** unsafe image defaults and misleading security claims. | Pin/scan images, use non-root, health check, graceful shutdown, run verify, and document actual config/operations/proprietary licence. | AUTH-05. | Yes | M |
@@ -92,6 +92,21 @@ result is a blocking, incomplete security baseline—not a clean scan.
   invalid limiter configuration. Compose and scan evidence is recorded in
   AUTH-02 and its pull request.
 
-AUTH-01, AUTH-02 and AUTH-11 are resolved. Token/session lifecycle, distributed
-gateway controls, error mapping and production persistence remain open, so the
+## AUTH-07 remediation evidence
+
+- Error responses use schema version 1 with a stable code, safe display
+  message, timestamp and the same correlation ID returned in the response
+  header.
+- Missing, expired, malformed, unsupported and invalid tokens return explicit
+  `401` codes. Credential failures remain uniform; validation, conflict,
+  throttling, not-found and unexpected paths also have stable status/code pairs.
+- The catch-all response never contains the exception message or cause. Logs
+  record only the exception class and request metadata, never parser messages,
+  credentials, signing keys or complete JWTs.
+- HTTP integration tests cover every token category, alternate-key signatures,
+  correlation propagation and response redaction; handler tests prove unknown
+  exceptions cannot disclose internal details.
+
+AUTH-01, AUTH-02, AUTH-07 and AUTH-11 are resolved. Token/session lifecycle,
+distributed gateway controls and production persistence remain open, so the
 service is still **not beta-ready**.

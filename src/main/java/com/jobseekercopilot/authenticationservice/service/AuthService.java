@@ -4,8 +4,14 @@ import com.jobseekercopilot.authenticationservice.exception.ConflictException;
 import com.jobseekercopilot.authenticationservice.exception.LoginRateLimitException;
 import com.jobseekercopilot.authenticationservice.exception.ResourceNotFoundException;
 import com.jobseekercopilot.authenticationservice.exception.UnauthorizedException;
+import com.jobseekercopilot.authenticationservice.exception.TokenValidationException;
 import com.jobseekercopilot.authenticationservice.model.*;
 import com.jobseekercopilot.authenticationservice.repository.UserRepository;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.MalformedJwtException;
+import io.jsonwebtoken.UnsupportedJwtException;
+import io.jsonwebtoken.security.SecurityException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -127,7 +133,7 @@ public class AuthService {
     public String validate(String token) {
         long startedAt = System.nanoTime();
         if (token == null || token.trim().isEmpty()) {
-            throw new IllegalArgumentException("Token cannot be null or empty");
+            throw TokenValidationException.required();
         }
 
         try {
@@ -136,11 +142,23 @@ public class AuthService {
                     userId,
                     (System.nanoTime() - startedAt) / 1_000_000);
             return userId;
-        } catch (Exception e) {
-            log.warn("JWT validation failed durationMs={} error={}",
-                    (System.nanoTime() - startedAt) / 1_000_000,
-                    e.getClass().getSimpleName());
-            throw new RuntimeException("Invalid or expired token", e);
+        } catch (ExpiredJwtException exception) {
+            return rejectToken(startedAt, exception, TokenValidationException.expired());
+        } catch (MalformedJwtException exception) {
+            return rejectToken(startedAt, exception, TokenValidationException.malformed());
+        } catch (UnsupportedJwtException exception) {
+            return rejectToken(startedAt, exception, TokenValidationException.unsupported());
+        } catch (SecurityException exception) {
+            return rejectToken(startedAt, exception, TokenValidationException.invalid());
+        } catch (JwtException | IllegalArgumentException exception) {
+            return rejectToken(startedAt, exception, TokenValidationException.invalid());
         }
+    }
+
+    private String rejectToken(long startedAt, Exception cause, TokenValidationException safeException) {
+        log.warn("JWT validation failed durationMs={} error={}",
+                (System.nanoTime() - startedAt) / 1_000_000,
+                cause.getClass().getSimpleName());
+        throw safeException;
     }
 }
