@@ -2,9 +2,9 @@
 
 Audit date: 18 July 2026
 
-Status: **Not beta-ready.** BCrypt hashing and signed JWT expiry are present,
-but signing-secret exposure, token lifecycle, brute-force resistance and
-production persistence are blockers.
+Status: **Not beta-ready.** Adaptive password hashing, uniform authentication
+failures, bounded local throttling and signed JWT expiry are present, but token
+lifecycle and production persistence are blockers.
 
 ## Baseline and secret finding
 
@@ -33,7 +33,7 @@ result is a blocking, incomplete security baseline—not a clean scan.
 | ID | Finding | Evidence | Risk and severity | Recommended solution and acceptance criteria | Dependencies | Beta blocker | Effort |
 |---|---|---|---|---|---|---|---|
 | [AUTH-01](https://github.com/jobseekercopilot/authentication-service/issues/1) | Rotate exposed credentials and require managed JWT keys | `application.properties` contained a signing value; Gitleaks found a generic credential in public root `.env` history. | **Critical / P0 security:** public or reused credentials can enable account/data compromise or token forgery. | Rotate affected real credentials outside Git; require a sufficiently strong runtime secret with startup validation; document ownership/key rotation; prove no current/history Gitleaks finding except reviewed fixtures. | Owner rotation and secret store. | Yes | M |
-| [AUTH-02](https://github.com/jobseekercopilot/authentication-service/issues/2) | Strengthen credentials and prevent account enumeration/brute force | Minimum password is four; emails are checked with `contains("@")`; missing user and wrong password return distinguishable messages; no throttling exists. | **High / P1 security:** weak passwords, enumeration and automated guessing. | Agree policy, validate length/Unicode/compromised-password handling, use uniform auth failures, rate-limit with lockout safeguards and test attack thresholds. | UMG-04/05. | Yes | L |
+| [AUTH-02](https://github.com/jobseekercopilot/authentication-service/issues/2) | Strengthen credentials and prevent account enumeration/brute force | **Remediated 2026-07-20:** 15–128 Unicode code points, local compromised-value checks, PBKDF2 with BCrypt migration, uniform failure paths and a bounded privacy-preserving limiter with automatic recovery are implemented and tested. A shared gateway/network limiter remains part of UMG-05 before scaling. | Resolved for the local beta path; distributed controls remain tracked at the gateway boundary. | Maintain the offline blocklist and re-evaluate limits before production or horizontal scaling. | UMG-04/05. | Yes | L |
 | [AUTH-03](https://github.com/jobseekercopilot/authentication-service/issues/3) | Implement a complete token/session lifecycle | JWT has only subject/iat/exp, lasts 24 hours, and has no issuer, audience, key ID, refresh rotation, revocation or server logout. | **High / P1 security:** stolen tokens remain usable and consumers cannot constrain issuer/audience. | Design short-lived access plus rotated refresh/session; validate issuer/audience/algorithm; support revocation/logout and rotation; test expiry, replay and clock skew. | Client session redesign. | Yes | XL |
 | [AUTH-04](https://github.com/jobseekercopilot/authentication-service/issues/4) | Protect service and environment-data endpoints | The service uses crypto but no Spring Security filter chain; `/internal/system-data` is guarded only by profile/property logic; H2 console and detailed health are enabled. | **High / P1 security:** direct network access can bypass intended gateway controls and expose management/dev functions. | Deny direct public access, authenticate service calls, make internal endpoints separately authorised, disable H2/Swagger/detailed health in production and test the production profile. | Service identity/network design. | Yes | L |
 | [AUTH-05](https://github.com/jobseekercopilot/authentication-service/issues/5) | Replace H2/`ddl-auto=update` with production persistence and migrations | File H2, blank database password, SQL logging and Hibernate auto-update are defaults; no migration files or restore plan exist. | **High / P1 data/reliability:** schema drift, weak durability and accidental credential/PII logging. | Select supported production database, add versioned migrations and constraints, separate local/prod config, test backup/restore and migration from empty/previous schema. | Platform database decision. | Yes | L |
@@ -74,6 +74,24 @@ result is a blocking, incomplete security baseline—not a clean scan.
   malformed/empty coverage or unaccepted Critical/High findings. Policy
   fixtures prove the negative paths and short-lived exception rules.
 
-AUTH-01 and AUTH-11 are resolved. Token/session lifecycle, error mapping,
-brute-force protection and production persistence remain open, so the service
-is still **not beta-ready**.
+## AUTH-02 remediation evidence
+
+- Registration enforces a 15–128 Unicode-code-point policy, basic bounded
+  identity validation and local compromised/account-derived password checks
+  without disclosing submitted passwords externally.
+- New hashes use PBKDF2. Raw legacy BCrypt hashes remain verifiable and are
+  transparently upgraded only following successful authentication.
+- Unknown, wrong-password and inactive-account attempts follow the same failure
+  response and generic log path; unknown accounts also perform a dummy hash
+  verification.
+- A bounded in-memory limiter uses only a digest of the normalized principal,
+  blocks on the tenth failure by default, supplies `Retry-After`, clears on
+  success and recovers automatically after 15 minutes.
+- Unit and HTTP integration tests cover policy boundaries, Unicode, compromised
+  values, uniform failures, hash migration, threshold behavior, recovery and
+  invalid limiter configuration. Compose and scan evidence is recorded in
+  AUTH-02 and its pull request.
+
+AUTH-01, AUTH-02 and AUTH-11 are resolved. Token/session lifecycle, distributed
+gateway controls, error mapping and production persistence remain open, so the
+service is still **not beta-ready**.
