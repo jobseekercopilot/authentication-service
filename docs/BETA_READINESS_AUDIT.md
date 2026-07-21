@@ -45,6 +45,7 @@ result is a blocking, incomplete security baseline—not a clean scan.
 | [AUTH-09](https://github.com/jobseekercopilot/authentication-service/issues/9) | Expand security and integration testing | No rate-limit, enumeration, cross-service auth, revocation, production-config or migration tests exist. | **High / P1 testing:** high-risk controls lack regression evidence. | Add unit/integration/contract/security tests plus full path coverage; run network-binding integration in CI. | AUTH-02–08. | Yes | L |
 | [AUTH-10](https://github.com/jobseekercopilot/authentication-service/issues/10) | Harden container and documentation | **Remediated:** the image consumes a verified JAR, uses digest-pinned bases, runs as fixed non-root UID/GID with health/SIGTERM policy, receives final-image scanning, and documents actual proprietary runtime behavior. | The evidenced container/default/documentation risk is resolved; digest refresh, registry provenance and deployment orchestration remain operator-owned. | Keep verified-image, metadata and Critical/High scan gates required; refresh digests through reviewed PRs and retain graceful-shutdown smoke evidence. | AUTH-05 and AUTH-04 complete. | No | M |
 | [AUTH-11](https://github.com/jobseekercopilot/authentication-service/issues/11) | Triage vulnerable dependencies and establish a reliable security gate | OWASP Dependency-Check reported 10 affected dependency records, including 17 Critical and 38 High entries before triage; two feed records failed processing, OSS Index lacked authentication, and CI only emits `mvn dependency:tree`. | **High / P1 dependency:** an authentication-facing vulnerable library can reach beta, while an incomplete feed can create false assurance. | Upgrade the Spring Boot/dependency baseline; triage duplicates, reachability and false positives with evidence; configure authenticated/cached advisory data; publish a machine-readable report; fail on unaccepted Critical/High findings and document risk acceptance. | Platform CI, advisory-feed and dependency-upgrade decisions. | Yes | L |
+| [AUTH-12](https://github.com/jobseekercopilot/authentication-service/issues/20) | Prevent generated default security credentials | **Remediated:** the application annotation excludes Boot 4's default-user auto-configuration by class; no default user-details bean or browser authentication entry point exists. | The unintended credential provider and startup disclosure path are removed without changing the explicit service boundary. | Retain bean-absence, captured-startup and real HTTP regression tests in default and production-profile contexts. | AUTH-04 and AUTH-10 complete. | No | S |
 
 ## AUTH-01 remediation evidence
 
@@ -138,6 +139,18 @@ result is a blocking, incomplete security baseline—not a clean scan.
   and full-history secret scanning. `docs/CONTAINER_OPERATIONS.md` records safe
   refresh, rollback, ownership and residual platform responsibilities.
 
+## AUTH-12 remediation evidence
+
+- `AuthenticationServiceApplication` excludes Boot 4's
+  `UserDetailsServiceAutoConfiguration` by class, so package drift becomes a
+  compilation failure rather than a silently ignored property string.
+- Default/test and production-profile contexts assert that no
+  `UserDetailsService` bean exists and captured startup output contains neither
+  the former credential notice nor the unintended in-memory provider name.
+- Real HTTP tests prove Basic credentials and form posts cannot create a browser
+  authentication path. The service-token boundary, separate environment-data
+  identity, deny-by-default routing and anonymous redacted health remain intact.
+
 ## AUTH-06 remediation evidence
 
 - One canonicalizer strips Unicode edge space, applies NFKC and locale-stable
@@ -153,6 +166,7 @@ result is a blocking, incomplete security baseline—not a clean scan.
 - `docs/EMAIL_IDENTITY.md` records the exact policy, excluded provider-specific
   rewrites, operational collision handling and residual confusable-address risk.
 
-AUTH-01, AUTH-02, AUTH-05, AUTH-06, AUTH-07 and AUTH-11 are resolved. Token/session lifecycle,
-distributed gateway controls and production provisioning remain open, so the
-service is still **not beta-ready**.
+AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-06, AUTH-07, AUTH-10,
+AUTH-11 and AUTH-12 are resolved. Account lifecycle, distributed gateway
+controls and production provisioning remain open, so the service is still
+**not beta-ready**.

@@ -15,6 +15,9 @@ fail-closed environment/profile guard; production remains forbidden.
 Only `/actuator/health` is public. Unknown routes, API documentation and every
 other management/application route are denied by the security chain. Production
 also disables H2, OpenAPI, Swagger UI and detailed health in configuration.
+The application excludes Spring Boot's default-user auto-configuration by class;
+it has no form login, HTTP Basic provider or generated fallback identity. Do not
+replace this compile-time exclusion with a package-name configuration string.
 
 Generate independent high-entropy values of at least 32 random bytes and supply
 them through the deployment secret manager. Never put them in a URL, browser
