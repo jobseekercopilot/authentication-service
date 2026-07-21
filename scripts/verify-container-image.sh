@@ -25,7 +25,7 @@ printf '%s' "$metadata" | jq -e '
 
 history=$(docker history --no-trunc --format '{{.CreatedBy}}' "$image") \
     || fail "image history could not be read"
-printf '%s' "$history" | grep -Eq 'JWT_SIGNING_KEY|AUTH_DB_PASSWORD|AUTH_SERVICE_TOKEN|AUTH_ENVIRONMENT_DATA_TOKEN' \
+printf '%s' "$history" | grep -Eq 'JWT_PRIVATE_KEY_BASE64|JWT_PUBLIC_KEY_BASE64|AUTH_DB_PASSWORD|AUTH_SERVICE_TOKEN|AUTH_ENVIRONMENT_DATA_TOKEN' \
     && fail "image history contains a secret variable name"
 
 echo "container policy: non-root identity, health check, SIGTERM, port, licence and history checks passed"

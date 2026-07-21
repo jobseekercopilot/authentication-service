@@ -1,5 +1,8 @@
 package com.jobseekercopilot.authenticationservice.service;
 
+import com.jobseekercopilot.authenticationservice.TestJwtKeys;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -8,83 +11,77 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class JwtSigningKeyStartupTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(PropertyPlaceholderAutoConfiguration.class))
             .withUserConfiguration(JwtTestConfiguration.class)
-            .withPropertyValues("jwt.expiration=3600000");
+            .withPropertyValues("jwt.expiration=3600000", "jwt.previous-public-keys=");
 
     @Test
-    void applicationContextFailsSafelyWhenSigningKeyIsMissing() {
+    void applicationContextFailsSafelyWhenKeysAreMissing() {
         contextRunner.run(context -> {
-            Throwable startupFailure = context.getStartupFailure();
-            assertNotNull(startupFailure);
-            assertTrue(messageChain(startupFailure)
-                    .contains("Could not resolve placeholder 'jwt.signing-key'"));
+            assertNotNull(context.getStartupFailure());
+            assertTrue(messages(context.getStartupFailure()).contains("jwt.private-key-base64"));
         });
     }
 
     @Test
-    void applicationContextFailsSafelyWhenSigningKeyIsBlank() {
-        contextRunner
-                .withPropertyValues("jwt.signing-key=   ")
-                .run(context -> assertConfigurationFailure(
-                        context.getStartupFailure(),
-                        "JWT signing key must be configured and must not be blank"));
-    }
-
-    @Test
-    void applicationContextFailsSafelyWhenSigningKeyIsWeak() {
-        String weakKey = "too-short";
-        contextRunner
-                .withPropertyValues("jwt.signing-key=" + weakKey)
+    void applicationContextFailsSafelyForMalformedOrMismatchedKeysWithoutEchoingMaterial() {
+        String privateKey = TestJwtKeys.privateKey(TestJwtKeys.ACTIVE);
+        contextRunner.withPropertyValues("jwt.private-key-base64=malformed", "jwt.public-key-base64=malformed")
+                .run(context -> assertConfigurationFailure(context.getStartupFailure()));
+        contextRunner.withPropertyValues("jwt.private-key-base64=" + privateKey,
+                        "jwt.public-key-base64=" + TestJwtKeys.publicKey(TestJwtKeys.DIFFERENT))
                 .run(context -> {
-                    Throwable startupFailure = context.getStartupFailure();
-                    assertConfigurationFailure(
-                            startupFailure,
-                            "JWT signing key must contain at least 32 bytes");
-                    assertFalse(messageChain(startupFailure).contains(weakKey));
+                    assertConfigurationFailure(context.getStartupFailure());
+                    assertFalse(messages(context.getStartupFailure()).contains(privateKey));
                 });
     }
 
     @Test
-    void applicationContextStartsWithStrongSigningKey() {
-        contextRunner
-                .withPropertyValues(
-                        "jwt.signing-key=startup-test-signing-material-never-use-for-runtime")
+    void applicationContextFailsForWeakRsaKey() throws Exception {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(1024);
+        KeyPair weak = generator.generateKeyPair();
+        contextRunner.withPropertyValues("jwt.private-key-base64=" + TestJwtKeys.privateKey(weak),
+                        "jwt.public-key-base64=" + TestJwtKeys.publicKey(weak))
+                .run(context -> assertConfigurationFailure(context.getStartupFailure()));
+    }
+
+    @Test
+    void applicationContextStartsWithMatchingStrongRsaKeys() {
+        contextRunner.withPropertyValues(
+                        "jwt.private-key-base64=" + TestJwtKeys.privateKey(TestJwtKeys.ACTIVE),
+                        "jwt.public-key-base64=" + TestJwtKeys.publicKey(TestJwtKeys.ACTIVE))
                 .run(context -> assertTrue(context.isRunning()));
     }
 
-    private String messageChain(Throwable failure) {
-        StringBuilder messages = new StringBuilder();
-        Throwable current = failure;
-        while (current != null) {
-            if (current.getMessage() != null) {
-                messages.append(current.getMessage()).append(' ');
-            }
-            current = current.getCause();
-        }
-        return messages.toString();
+    private static void assertConfigurationFailure(Throwable failure) {
+        assertNotNull(failure);
+        assertTrue(messages(failure).contains("JWT RSA key configuration is missing or invalid"));
     }
 
-    private void assertConfigurationFailure(Throwable startupFailure, String expectedMessage) {
-        assertNotNull(startupFailure);
-        assertTrue(messageChain(startupFailure).contains(expectedMessage));
+    private static String messages(Throwable failure) {
+        StringBuilder result = new StringBuilder();
+        for (Throwable current = failure; current != null; current = current.getCause()) {
+            if (current.getMessage() != null) result.append(current.getMessage()).append(' ');
+        }
+        return result.toString();
     }
 
     @Configuration(proxyBeanMethods = false)
     static class JwtTestConfiguration {
-
         @Bean
         JwtTokenProvider jwtTokenProvider(
-                @Value("${jwt.signing-key}") String signingKey,
+                @Value("${jwt.private-key-base64}") String privateKey,
+                @Value("${jwt.public-key-base64}") String publicKey,
+                @Value("${jwt.previous-public-keys}") String previousKeys,
                 @Value("${jwt.expiration}") long expiration) {
-            return new JwtTokenProvider(signingKey, expiration);
+            return new JwtTokenProvider(privateKey, publicKey, previousKeys, expiration,
+                    "test-issuer", "test-audience", "test-key", 0, java.time.Clock.systemUTC());
         }
     }
 }

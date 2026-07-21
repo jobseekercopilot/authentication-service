@@ -3,7 +3,6 @@ package com.jobseekercopilot.authenticationservice;
 import com.jobseekercopilot.authenticationservice.model.LoginRequest;
 import com.jobseekercopilot.authenticationservice.model.RegisterRequest;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.TestInstance;
@@ -21,7 +20,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.userdetails.UserDetailsService;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Map;
 
@@ -37,8 +35,6 @@ import static org.junit.jupiter.api.Assertions.*;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class AuthenticationServiceIntegrationTest {
 
-    private static final String TEST_SIGNING_KEY =
-            "test-only-signing-material-never-use-for-local-runtime";
     private static final String SERVICE_TOKEN = "test-only-authentication-service-token-32-bytes";
     private static final String ENVIRONMENT_DATA_TOKEN = "test-only-environment-data-token-32-bytes";
 
@@ -310,7 +306,6 @@ class AuthenticationServiceIntegrationTest {
 
     @Test
     void expiredTokenReturnsStableUnauthorizedErrorWithoutParserDetails() {
-        var key = Keys.hmacShaKeyFor(TEST_SIGNING_KEY.getBytes(StandardCharsets.UTF_8));
         Date now = new Date();
         String token = Jwts.builder()
                 .header().keyId("test-key").and()
@@ -322,7 +317,7 @@ class AuthenticationServiceIntegrationTest {
                 .claim("token_type", "access")
                 .issuedAt(new Date(now.getTime() - 120_000))
                 .expiration(new Date(now.getTime() - 60_000))
-                .signWith(key, Jwts.SIG.HS256)
+                .signWith(TestJwtKeys.ACTIVE.getPrivate(), Jwts.SIG.RS256)
                 .compact();
 
         assertTokenFailure(token, "TOKEN_EXPIRED", "The authentication token has expired.");
@@ -343,13 +338,25 @@ class AuthenticationServiceIntegrationTest {
     @Test
     void differentlySignedTokenReturnsStableUnauthorizedError() {
         String token = Jwts.builder()
+                .header().keyId("different-key").and()
                 .subject("other-key-user")
                 .expiration(new Date(System.currentTimeMillis() + 60_000))
-                .signWith(Keys.hmacShaKeyFor(
-                        "different-test-only-signing-material-never-use-locally".getBytes(StandardCharsets.UTF_8)))
+                .signWith(TestJwtKeys.DIFFERENT.getPrivate(), Jwts.SIG.RS256)
                 .compact();
 
         assertTokenFailure(token, "TOKEN_INVALID", "The authentication token is invalid.");
+    }
+
+    @Test
+    void jwksIsPublicCacheableAndContainsNoPrivateMaterial() {
+        TestRestTemplate unauthenticated = new TestRestTemplate();
+        ResponseEntity<Map> response = unauthenticated.getForEntity(url("/.well-known/jwks.json"), Map.class);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getHeaders().getCacheControl().contains("max-age=300"));
+        assertTrue(response.getHeaders().getCacheControl().contains("public"));
+        assertFalse(response.getBody().toString().contains("\"d\""));
+        assertTrue(response.getBody().toString().contains(TestJwtKeys.ACTIVE_KEY_ID));
     }
 
     @Test

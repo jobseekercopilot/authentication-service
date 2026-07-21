@@ -1,178 +1,127 @@
 package com.jobseekercopilot.authenticationservice.service;
 
+import com.jobseekercopilot.authenticationservice.TestJwtKeys;
 import io.jsonwebtoken.ExpiredJwtException;
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.boot.test.system.CapturedOutput;
-import org.springframework.boot.test.system.OutputCaptureExtension;
-
-import javax.crypto.SecretKey;
-import java.nio.charset.StandardCharsets;
-import java.util.Date;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.PublicKey;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Date;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@ExtendWith(OutputCaptureExtension.class)
-public class JwtTokenProviderTest {
+class JwtTokenProviderTest {
 
-    private static final String TEST_SIGNING_KEY =
-            "unit-test-signing-material-never-use-for-local-runtime";
-    private static final String DIFFERENT_SIGNING_KEY =
-            "different-test-signing-material-never-use-for-runtime";
     private static final long ONE_HOUR_MS = 3_600_000;
+    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-07-21T12:00:00Z"), ZoneOffset.UTC);
 
     @Test
-    void newlyIssuedTokenIsAccepted(CapturedOutput output) {
-        JwtTokenProvider jwtTokenProvider = new JwtTokenProvider(TEST_SIGNING_KEY, ONE_HOUR_MS);
-        String userId = "user123";
-        String token = jwtTokenProvider.generateToken(userId);
+    void newlyIssuedRs256TokenIsAcceptedAndPublishesOnlyPublicMaterial() {
+        JwtTokenProvider provider = provider(TestJwtKeys.ACTIVE, Map.of(), "active");
+        String token = provider.generateAccessToken("user123", "session123");
 
-        assertNotNull(token);
-        assertEquals(userId, jwtTokenProvider.getUserIdFromToken(token));
-        assertFalse(output.getAll().contains(TEST_SIGNING_KEY));
-        assertFalse(output.getAll().contains(token));
-    }
+        assertEquals("user123", provider.parseAccessToken(token).userId());
+        var parsed = Jwts.parser().verifyWith(TestJwtKeys.ACTIVE.getPublic())
+                .clock(() -> Date.from(CLOCK.instant())).build().parseSignedClaims(token);
+        assertEquals("RS256", parsed.getHeader().getAlgorithm());
+        assertEquals("active", parsed.getHeader().getKeyId());
+        assertEquals("session123", parsed.getPayload().get("sid"));
+        assertEquals("access", parsed.getPayload().get("token_type"));
 
-    @Test
-    void tokenSignedWithDifferentKeyIsRejected() {
-        JwtTokenProvider currentProvider = new JwtTokenProvider(TEST_SIGNING_KEY, ONE_HOUR_MS);
-        JwtTokenProvider previousProvider = new JwtTokenProvider(DIFFERENT_SIGNING_KEY, ONE_HOUR_MS);
-
-        String tokenFromPreviousKey = previousProvider.generateToken("user123");
-
-        assertThrows(JwtException.class,
-                () -> currentProvider.getUserIdFromToken(tokenFromPreviousKey));
+        Map<String, String> jwk = provider.getJsonWebKeys().get(0);
+        assertEquals(Map.of("kty", "RSA", "use", "sig", "alg", "RS256", "kid", "active",
+                "n", jwk.get("n"), "e", jwk.get("e")), jwk);
+        assertFalse(jwk.containsKey("d"));
+        assertFalse(jwk.toString().contains(TestJwtKeys.privateKey(TestJwtKeys.ACTIVE)));
     }
 
     @Test
-    void expiredTokenIsRejected() {
-        SecretKey key = Keys.hmacShaKeyFor(TEST_SIGNING_KEY.getBytes(StandardCharsets.UTF_8));
-        Date now = new Date();
-        String expiredToken = Jwts.builder()
-                .subject("user123")
-                .issuedAt(new Date(now.getTime() - 2_000))
-                .expiration(new Date(now.getTime() - 1_000))
-                .signWith(key)
-                .compact();
+    void previousPublicKeyRemainsValidDuringRotationAndIsPublished() {
+        JwtTokenProvider oldProvider = provider(TestJwtKeys.PREVIOUS, Map.of(), "previous");
+        JwtTokenProvider currentProvider = provider(
+                TestJwtKeys.ACTIVE, Map.of("previous", TestJwtKeys.PREVIOUS.getPublic()), "active");
 
-        JwtTokenProvider provider = new JwtTokenProvider(TEST_SIGNING_KEY, ONE_HOUR_MS);
-        assertThrows(ExpiredJwtException.class, () -> provider.getUserIdFromToken(expiredToken));
+        assertEquals("user123", currentProvider.parseAccessToken(oldProvider.generateToken("user123")).userId());
+        assertEquals(2, currentProvider.getJsonWebKeys().size());
     }
 
     @Test
-    void malformedTokenIsRejected() {
-        JwtTokenProvider provider = new JwtTokenProvider(TEST_SIGNING_KEY, ONE_HOUR_MS);
+    void unknownKeyWrongAlgorithmMalformedAndExpiredTokensAreRejected() throws Exception {
+        JwtTokenProvider provider = provider(TestJwtKeys.ACTIVE, Map.of(), "active");
+        JwtTokenProvider other = provider(TestJwtKeys.DIFFERENT, Map.of(), "different");
+        assertThrows(JwtException.class, () -> provider.parseAccessToken(other.generateToken("user123")));
+        assertThrows(JwtException.class, () -> provider.parseAccessToken("not-a-jwt"));
 
-        assertThrows(JwtException.class, () -> provider.getUserIdFromToken("not-a-jwt"));
+        String expired = constrainedToken(TestJwtKeys.ACTIVE, "active", "expected-issuer",
+                "expected-audience", CLOCK.instant().minusSeconds(31));
+        assertThrows(ExpiredJwtException.class, () -> provider.parseAccessToken(expired));
+
+        var hmac = io.jsonwebtoken.security.Keys.hmacShaKeyFor(new byte[32]);
+        String wrongAlgorithm = Jwts.builder().header().keyId("active").and().subject("user")
+                .expiration(Date.from(CLOCK.instant().plusSeconds(60))).signWith(hmac).compact();
+        assertThrows(JwtException.class, () -> provider.parseAccessToken(wrongAlgorithm));
     }
 
     @Test
-    void missingSigningKeyIsRejectedWithoutEchoingValue() {
-        IllegalStateException exception = assertThrows(IllegalStateException.class,
-                () -> new JwtTokenProvider(null, ONE_HOUR_MS));
-
-        assertEquals("JWT signing key must be configured and must not be blank", exception.getMessage());
+    void issuerAudienceAndClockSkewAreEnforced() {
+        JwtTokenProvider provider = provider(TestJwtKeys.ACTIVE, Map.of(), "active");
+        assertThrows(JwtException.class, () -> provider.parseAccessToken(constrainedToken(
+                TestJwtKeys.ACTIVE, "active", "wrong", "expected-audience", CLOCK.instant().plusSeconds(60))));
+        assertThrows(JwtException.class, () -> provider.parseAccessToken(constrainedToken(
+                TestJwtKeys.ACTIVE, "active", "expected-issuer", "wrong", CLOCK.instant().plusSeconds(60))));
+        assertEquals("user-123", provider.parseAccessToken(constrainedToken(
+                TestJwtKeys.ACTIVE, "active", "expected-issuer", "expected-audience",
+                CLOCK.instant().minusSeconds(20))).userId());
+        assertThrows(ExpiredJwtException.class, () -> provider.parseAccessToken(constrainedToken(
+                TestJwtKeys.ACTIVE, "active", "expected-issuer", "expected-audience",
+                CLOCK.instant().minusSeconds(31))));
     }
 
     @Test
-    void blankSigningKeyIsRejectedWithoutEchoingValue() {
-        IllegalStateException exception = assertThrows(IllegalStateException.class,
-                () -> new JwtTokenProvider("   ", ONE_HOUR_MS));
+    void missingMalformedWeakMismatchedAndDuplicateKeyConfigurationFailsSafely() throws Exception {
+        assertConfigFailure(() -> new JwtTokenProvider(null, "bad", "", ONE_HOUR_MS,
+                "issuer", "audience", "active", 0, CLOCK));
+        assertConfigFailure(() -> new JwtTokenProvider("bad", "bad", "", ONE_HOUR_MS,
+                "issuer", "audience", "active", 0, CLOCK));
+        assertConfigFailure(() -> new JwtTokenProvider(TestJwtKeys.privateKey(TestJwtKeys.ACTIVE),
+                TestJwtKeys.publicKey(TestJwtKeys.DIFFERENT), "", ONE_HOUR_MS,
+                "issuer", "audience", "active", 0, CLOCK));
 
-        assertEquals("JWT signing key must be configured and must not be blank", exception.getMessage());
+        KeyPairGenerator weakGenerator = KeyPairGenerator.getInstance("RSA");
+        weakGenerator.initialize(1024);
+        KeyPair weak = weakGenerator.generateKeyPair();
+        assertConfigFailure(() -> new JwtTokenProvider(TestJwtKeys.privateKey(weak),
+                TestJwtKeys.publicKey(weak), "", ONE_HOUR_MS,
+                "issuer", "audience", "active", 0, CLOCK));
+        IllegalStateException duplicate = assertThrows(IllegalStateException.class,
+                () -> new JwtTokenProvider(TestJwtKeys.privateKey(TestJwtKeys.ACTIVE),
+                TestJwtKeys.publicKey(TestJwtKeys.ACTIVE),
+                "active=" + TestJwtKeys.publicKey(TestJwtKeys.PREVIOUS), ONE_HOUR_MS,
+                "issuer", "audience", "active", 0, CLOCK));
+        assertEquals("JWT issuer, audience and unique key IDs must be configured", duplicate.getMessage());
     }
 
-    @Test
-    void weakSigningKeyIsRejectedWithoutEchoingValue() {
-        String weakKey = "too-short";
-        IllegalStateException exception = assertThrows(IllegalStateException.class,
-                () -> new JwtTokenProvider(weakKey, ONE_HOUR_MS));
-
-        assertEquals("JWT signing key must contain at least 32 bytes", exception.getMessage());
-        assertFalse(exception.getMessage().contains(weakKey));
+    private static JwtTokenProvider provider(KeyPair pair, Map<String, PublicKey> previous, String kid) {
+        return new JwtTokenProvider(pair.getPrivate(), pair.getPublic(), previous, 900_000,
+                "expected-issuer", "expected-audience", kid, 30, CLOCK);
     }
 
-    @Test
-    void issuedAccessTokenHasConstrainedMetadataAndClaims() {
-        Clock clock = Clock.fixed(Instant.parse("2026-07-21T12:00:00Z"), ZoneOffset.UTC);
-        JwtTokenProvider provider = new JwtTokenProvider(
-                TEST_SIGNING_KEY, 900_000, "expected-issuer", "expected-audience", "key-2026-01", 30, clock);
-
-        String token = provider.generateAccessToken("user-123", "session-123");
-        SecretKey key = Keys.hmacShaKeyFor(TEST_SIGNING_KEY.getBytes(StandardCharsets.UTF_8));
-        Jws<Claims> parsed = Jwts.parser().verifyWith(key)
-                .clock(() -> Date.from(clock.instant()))
-                .build().parseSignedClaims(token);
-
-        assertEquals("HS256", parsed.getHeader().getAlgorithm());
-        assertEquals("key-2026-01", parsed.getHeader().getKeyId());
-        assertEquals("expected-issuer", parsed.getPayload().getIssuer());
-        assertTrue(parsed.getPayload().getAudience().contains("expected-audience"));
-        assertEquals("user-123", parsed.getPayload().getSubject());
-        assertEquals("session-123", parsed.getPayload().get("sid", String.class));
-        assertEquals("access", parsed.getPayload().get("token_type", String.class));
-        assertNotNull(parsed.getPayload().getId());
+    private static String constrainedToken(
+            KeyPair pair, String kid, String issuer, String audience, Instant expiration) {
+        return Jwts.builder().header().keyId(kid).and().issuer(issuer).audience().add(audience).and()
+                .subject("user-123").id("token-id").claim("sid", "session-123")
+                .claim("token_type", "access").issuedAt(Date.from(CLOCK.instant().minusSeconds(60)))
+                .expiration(Date.from(expiration)).signWith(pair.getPrivate(), Jwts.SIG.RS256).compact();
     }
 
-    @Test
-    void wrongIssuerAudienceOrAlgorithmIsRejected() {
-        Clock clock = Clock.fixed(Instant.parse("2026-07-21T12:00:00Z"), ZoneOffset.UTC);
-        JwtTokenProvider provider = new JwtTokenProvider(
-                TEST_SIGNING_KEY, 900_000, "expected-issuer", "expected-audience", "test-key", 30, clock);
-
-        assertThrows(JwtException.class, () -> provider.parseAccessToken(
-                constrainedToken(clock, "wrong-issuer", "expected-audience", Jwts.SIG.HS256)));
-        assertThrows(JwtException.class, () -> provider.parseAccessToken(
-                constrainedToken(clock, "expected-issuer", "wrong-audience", Jwts.SIG.HS256)));
-        assertThrows(JwtException.class, () -> provider.parseAccessToken(
-                constrainedToken(clock, "expected-issuer", "expected-audience", Jwts.SIG.HS384)));
-    }
-
-    @Test
-    void configuredClockSkewIsAcceptedButNotExceeded() {
-        Instant now = Instant.parse("2026-07-21T12:00:00Z");
-        Clock clock = Clock.fixed(now, ZoneOffset.UTC);
-        JwtTokenProvider provider = new JwtTokenProvider(
-                TEST_SIGNING_KEY, 900_000, "expected-issuer", "expected-audience", "test-key", 30, clock);
-
-        String withinSkew = constrainedToken(clock, "expected-issuer", "expected-audience",
-                Jwts.SIG.HS256, now.minusSeconds(20));
-        String beyondSkew = constrainedToken(clock, "expected-issuer", "expected-audience",
-                Jwts.SIG.HS256, now.minusSeconds(31));
-
-        assertEquals("user-123", provider.parseAccessToken(withinSkew).userId());
-        assertThrows(ExpiredJwtException.class, () -> provider.parseAccessToken(beyondSkew));
-    }
-
-    private String constrainedToken(
-            Clock clock, String issuer, String audience,
-            io.jsonwebtoken.security.MacAlgorithm algorithm) {
-        return constrainedToken(clock, issuer, audience, algorithm, clock.instant().plusSeconds(300));
-    }
-
-    private String constrainedToken(
-            Clock clock, String issuer, String audience,
-            io.jsonwebtoken.security.MacAlgorithm algorithm, Instant expiration) {
-        SecretKey key = Keys.hmacShaKeyFor(TEST_SIGNING_KEY.getBytes(StandardCharsets.UTF_8));
-        return Jwts.builder()
-                .header().keyId("test-key").and()
-                .issuer(issuer)
-                .audience().add(audience).and()
-                .subject("user-123")
-                .id("token-id")
-                .claim("sid", "session-123")
-                .claim("token_type", "access")
-                .issuedAt(Date.from(clock.instant().minusSeconds(60)))
-                .expiration(Date.from(expiration))
-                .signWith(key, algorithm)
-                .compact();
+    private static void assertConfigFailure(org.junit.jupiter.api.function.Executable executable) {
+        IllegalStateException exception = assertThrows(IllegalStateException.class, executable);
+        assertEquals("JWT RSA key configuration is missing or invalid", exception.getMessage());
     }
 }

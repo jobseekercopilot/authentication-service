@@ -10,7 +10,7 @@ short-lived access/refresh session issue, rotation, revocation and current-accou
 ## Requirements and configuration
 
 - Java 17 and Maven 3.9
-- a runtime JWT signing key containing at least 32 UTF-8 bytes
+- a matching RSA private/public key pair of at least 2048 bits
 - PostgreSQL 17 (provided by Docker Compose for the local container journey)
 - OpenSSL for local key generation; `curl` and `jq` for the smoke test
 - Docker for the verified non-root image and Compose journey
@@ -22,7 +22,9 @@ short-lived access/refresh session issue, rotation, revocation and current-accou
 | `AUTH_DB_URL` | local PostgreSQL URL | PostgreSQL JDBC URL |
 | `AUTH_DB_USERNAME` | `authentication` locally | Database principal |
 | `AUTH_DB_PASSWORD` | none; required | Database secret |
-| `JWT_SIGNING_KEY` | none; required | Access-token signing key (minimum 32 UTF-8 bytes) |
+| `JWT_PRIVATE_KEY_BASE64` | none; required | PKCS#8 DER RSA private signing key, Base64 encoded |
+| `JWT_PUBLIC_KEY_BASE64` | none; required | Matching X.509 DER RSA public key, Base64 encoded |
+| `JWT_PREVIOUS_PUBLIC_KEYS` | blank | Rotation overlap as comma-separated `kid=base64-public-key` entries |
 | `AUTH_SERVICE_TOKEN` | none; required | Minimum 32-byte identity shared only with user-management-gateway |
 | `AUTH_ENVIRONMENT_DATA_TOKEN` | none; required | Distinct minimum 32-byte identity for non-production system-data tooling |
 | `JWT_ACCESS_TOKEN_EXPIRATION_MS` | `900000` (15 minutes) | Access-token lifetime; startup rejects values above one hour |
@@ -36,8 +38,8 @@ short-lived access/refresh session issue, rotation, revocation and current-accou
 | `AUTH_LOGIN_LOCK_DURATION` | `15m` | Automatic recovery delay after the threshold |
 | `AUTH_LOGIN_MAXIMUM_TRACKED_PRINCIPALS` | `10000` | Memory bound for locally tracked principals |
 
-There is no fallback signing key. Missing, blank and weak values fail startup
-without echoing key material. Never reuse the compromised historical value.
+There is no fallback signing key. Missing, malformed, mismatched and RSA keys
+below 2048 bits fail startup without echoing key material.
 The local key belongs only in the ignored `.env` file generated below.
 
 ## API, health and build
@@ -47,7 +49,8 @@ The local key belongs only in the ignored `.env` file generated below.
 - `POST /api/auth/refresh`
 - `POST /api/auth/logout` with bearer token
 - `GET /api/auth/me` with bearer token
-- `/actuator/health` (the only unauthenticated route)
+- `GET /.well-known/jwks.json` (public verification keys, cacheable for 5 minutes)
+- `/actuator/health` (unauthenticated health route)
 
 Every `/api/auth/**` request also requires `X-Service-Token`; this is injected
 by user-management-gateway and is not a browser credential. The separately
@@ -111,9 +114,9 @@ graceful shutdown inside a 35-second Compose stop window. See
 [container operations](docs/CONTAINER_OPERATIONS.md) for image refresh,
 verification, scanning, startup and rollback ownership.
 
-The generator creates `.env` with owner-only permissions and never prints its
-generated signing key or local database password. Compose requires both values
-from that file and injects them into the relevant containers. `.env.example`
+The generator creates a 3072-bit RSA pair in `.env` with owner-only permissions
+and never prints its private key or local database password. Compose requires
+the values from that file and injects them into the relevant containers. `.env.example`
 contains deliberately blank placeholders. Tests use separate, clearly
 non-runtime material under `src/test`; CI therefore needs no persistent secret.
 
@@ -138,10 +141,10 @@ duration. This is a per-process safety control, so a future horizontally scaled
 deployment also requires an owner-approved shared limiter. See
 [credential security](docs/CREDENTIAL_SECURITY.md) for policy and trade-offs.
 
-To rotate the local key, stop the Compose service, remove or archive `.env`
-outside the repository, rerun the generator, and recreate the container.
-Replacing the key invalidates every existing local JWT, so developers must log
-in again. Never restore or reuse an exposed previous key.
+For non-disruptive rotation, choose a new `JWT_KEY_ID`, configure the old public
+key in `JWT_PREVIOUS_PUBLIC_KEYS`, deploy the new pair, and retain the old public
+key for at least the maximum access-token lifetime plus clock skew and JWKS cache
+age. Then remove it. Previous private keys must never be retained or published.
 
 For a direct local process, start PostgreSQL, load the ignored `.env` into the
 process environment, and then run `mvn spring-boot:run`. Do not put secret
@@ -167,9 +170,9 @@ ownership and the short-lived exception process are documented in
 ## Branch workflow and troubleshooting
 
 Use `feature/* → develop`; `main` will be added later as a release branch. A
-startup failure mentioning `jwt.signing-key` means `JWT_SIGNING_KEY` was not
-supplied or was too weak. Authentication failures must be diagnosed through
-correlation IDs, never by logging emails, passwords, signing keys or complete
+startup failure mentioning JWT RSA key configuration means the private/public
+pair is missing, malformed, weak or mismatched. Authentication failures must be
+diagnosed through correlation IDs, never by logging emails, passwords, signing keys or complete
 tokens. Use the response `code` for client behavior and the correlation ID for
 diagnosis; messages are safe display text rather than internal diagnostics. Do
 not raise login thresholds casually: lower values increase denial-of-
