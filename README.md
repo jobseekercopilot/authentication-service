@@ -3,8 +3,8 @@
 Spring Boot service for account registration, adaptive password verification,
 short-lived access/refresh session issue, rotation, revocation and current-account lookup.
 
-> Beta status: not beta-ready. Endpoint controls, account
-> lifecycle, and broader security coverage remain blockers. See
+> Beta status: not beta-ready. Account lifecycle and broader cross-service
+> security coverage remain blockers. See
 > [the audit](docs/BETA_READINESS_AUDIT.md).
 
 ## Requirements and configuration
@@ -13,6 +13,7 @@ short-lived access/refresh session issue, rotation, revocation and current-accou
 - a runtime JWT signing key containing at least 32 UTF-8 bytes
 - PostgreSQL 17 (provided by Docker Compose for the local container journey)
 - OpenSSL for local key generation; `curl` and `jq` for the smoke test
+- Docker for the verified non-root image and Compose journey
 
 | Variable/property | Local default | Purpose |
 |---|---|---|
@@ -93,11 +94,22 @@ token: the later BFF/client work owns its Secure, HttpOnly cookie boundary. See
 ```bash
 mvn -B verify
 ./scripts/test-dependency-report-policy.sh
+docker build -t authentication-service:local .
+./scripts/verify-container-image.sh authentication-service:local
 ./scripts/generate-local-signing-key.sh
 docker compose up --build --detach
 ./scripts/smoke-test-auth.sh
 docker compose down
 ```
+
+The image build deliberately consumes only the JAR produced by the preceding
+`mvn verify`; it does not contain a second test-skipping Maven build. Runtime and
+Compose bases are digest-pinned, the service runs as UID/GID `10001` with no
+Linux capabilities in Compose, and the health check exercises the redacted
+anonymous actuator endpoint. SIGTERM receives up to 30 seconds of Spring
+graceful shutdown inside a 35-second Compose stop window. See
+[container operations](docs/CONTAINER_OPERATIONS.md) for image refresh,
+verification, scanning, startup and rollback ownership.
 
 The generator creates `.env` with owner-only permissions and never prints its
 generated signing key or local database password. Compose requires both values
@@ -146,8 +158,10 @@ backup/restore, rollback, ownership, legacy local H2 handling, and residual risk
 CI scans the resolved runtime dependency set with pinned Trivy, uploads a JSON
 report, and fails closed on missing coverage or any unaccepted Critical/High
 finding. The current supported baseline is Spring Boot 4.1.0 with no accepted
-dependency exceptions. Reproduction, ownership and the short-lived exception
-process are documented in
+dependency exceptions. A separate required job rebuilds the JAR with complete
+verification, builds the final image, asserts its runtime metadata, scans OS and
+library packages, and applies the same Critical/High policy. Reproduction,
+ownership and the short-lived exception process are documented in
 [the dependency security runbook](docs/DEPENDENCY_SECURITY.md).
 
 ## Branch workflow and troubleshooting

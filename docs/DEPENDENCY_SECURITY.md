@@ -29,6 +29,15 @@ The CI `verify` job:
 Gitleaks separately scans complete Git history. Dependency scanning does not
 replace authentication security tests, runtime hardening or secret scanning.
 
+The required `container` job starts only after `verify` and `secrets` pass. It
+repeats `mvn -B verify` to create the only JAR admitted by `.dockerignore`,
+builds the final digest-pinned image, enforces non-root/health/SIGTERM/licence
+metadata, scans both OS and library packages, uploads
+`image-vulnerability-report-<commit>` for 30 days, and applies the same
+Critical/High report policy. The duplicate verification is intentional: jobs
+have isolated workspaces and the container job must not accept an unverified
+artifact from another source.
+
 The Trivy Action caches the vulnerability and Java advisory databases using
 GitHub Actions cache rules and refreshes them from Aqua's public OCI mirrors.
 A database download, scan, report upload or policy failure fails the job; CI
@@ -65,6 +74,12 @@ Only the resolved JAR directory, the ignore file and the report directory are
 mounted. Do not mount the repository or Docker socket into a scanner. Do not
 commit generated reports or caches. Pull-request CI remains authoritative
 because it runs from a clean checkout with current advisory data.
+
+The final-image scan is normally reproduced by building from the verified JAR
+and scanning `authentication-service:local` with Trivy 0.72.0. Do not grant a
+third-party scanner the Docker socket and do not mount the repository. Where a
+locally installed Trivy binary is unavailable, rely on the required clean CI
+job rather than weakening isolation.
 
 ## Upgrade and risk-acceptance procedure
 

@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
     environment:
       POSTGRES_DB: authentication
       POSTGRES_USER: authentication
@@ -14,13 +14,29 @@ services:
       - auth-postgres-data:/var/lib/postgresql/data
 
   authentication-service:
+    image: authentication-service:local
     build:
       context: .
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 35s
     ports:
       - "${AUTH_PORT:-8084}:8084"
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8084/actuator/health"]
+      interval: 10s
+      timeout: 3s
+      start_period: 30s
+      retries: 6
     environment:
       SPRING_PROFILES_ACTIVE: production
       JWT_SIGNING_KEY: "${JWT_SIGNING_KEY:?Run ./scripts/generate-local-signing-key.sh first}"
