@@ -5,7 +5,8 @@
 .github
 .idea
 .vscode
-target
+target/*
+!target/authentication-service-1.0.0.jar
 *.db
 *.mv.db
 *.trace.db

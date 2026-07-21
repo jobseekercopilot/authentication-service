@@ -4,8 +4,9 @@ Audit date: 18 July 2026
 
 Status: **Not beta-ready.** Adaptive password hashing, uniform authentication
 failures, bounded local throttling, signed JWT expiry and migration-backed
-PostgreSQL persistence are present, but token lifecycle and endpoint controls
-remain blockers.
+PostgreSQL persistence are present. Token/session lifecycle and service endpoint
+controls are now implemented; account lifecycle and broader full-path security
+evidence remain blockers.
 
 ## Baseline and secret finding
 
@@ -42,7 +43,7 @@ result is a blocking, incomplete security baseline—not a clean scan.
 | [AUTH-07](https://github.com/jobseekercopilot/authentication-service/issues/7) | Return stable non-leaking authentication errors | **Remediated:** known token and request failures map to stable versioned codes with correlation IDs; unknown failures return a redacted 500. | **High / P1 security/API, mitigated:** invalid tokens no longer become leaking parser/internal failures. | Keep version 1 codes backward compatible and use correlation IDs rather than exposing causes. | UMG-04 safe-error pattern complete. | No | M |
 | [AUTH-08](https://github.com/jobseekercopilot/authentication-service/issues/8) | Decide and implement account lifecycle capabilities | Password change/reset, logout/revocation, deletion and retention/export flows are absent. | **High / P1 functional/privacy:** controlled-beta account support and deletion obligations are undefined. | Record beta decisions; implement required endpoints with re-authentication, audit events and tests, or explicitly defer with accepted risk/runbook. | AUTH-03 and privacy decision. | Yes | L |
 | [AUTH-09](https://github.com/jobseekercopilot/authentication-service/issues/9) | Expand security and integration testing | No rate-limit, enumeration, cross-service auth, revocation, production-config or migration tests exist. | **High / P1 testing:** high-risk controls lack regression evidence. | Add unit/integration/contract/security tests plus full path coverage; run network-binding integration in CI. | AUTH-02–08. | Yes | L |
-| [AUTH-10](https://github.com/jobseekercopilot/authentication-service/issues/10) | Harden container and documentation | Docker skips tests, runs as root on mutable images; README claims RBAC/CORS/Spring Security and MIT licensing that source does not implement. | **Medium / P1 devops/docs:** unsafe image defaults and misleading security claims. | Pin/scan images, use non-root, health check, graceful shutdown, run verify, and document actual config/operations/proprietary licence. | AUTH-05. | Yes | M |
+| [AUTH-10](https://github.com/jobseekercopilot/authentication-service/issues/10) | Harden container and documentation | **Remediated:** the image consumes a verified JAR, uses digest-pinned bases, runs as fixed non-root UID/GID with health/SIGTERM policy, receives final-image scanning, and documents actual proprietary runtime behavior. | The evidenced container/default/documentation risk is resolved; digest refresh, registry provenance and deployment orchestration remain operator-owned. | Keep verified-image, metadata and Critical/High scan gates required; refresh digests through reviewed PRs and retain graceful-shutdown smoke evidence. | AUTH-05 and AUTH-04 complete. | No | M |
 | [AUTH-11](https://github.com/jobseekercopilot/authentication-service/issues/11) | Triage vulnerable dependencies and establish a reliable security gate | OWASP Dependency-Check reported 10 affected dependency records, including 17 Critical and 38 High entries before triage; two feed records failed processing, OSS Index lacked authentication, and CI only emits `mvn dependency:tree`. | **High / P1 dependency:** an authentication-facing vulnerable library can reach beta, while an incomplete feed can create false assurance. | Upgrade the Spring Boot/dependency baseline; triage duplicates, reachability and false positives with evidence; configure authenticated/cached advisory data; publish a machine-readable report; fail on unaccepted Critical/High findings and document risk acceptance. | Platform CI, advisory-feed and dependency-upgrade decisions. | Yes | L |
 
 ## AUTH-01 remediation evidence
@@ -116,12 +117,26 @@ result is a blocking, incomplete security baseline—not a clean scan.
   index. Hibernate uses `validate`; SQL value logging and the H2 console are off.
 - The production profile requires explicit PostgreSQL configuration and
   nonblank credentials without echoing values. Swagger and detailed health are
-  disabled there pending AUTH-04's wider endpoint controls.
+  disabled there; AUTH-04 now enforces the wider endpoint boundary.
 - Disposable PostgreSQL tests migrate an empty database and version 1 to the
   latest version, prove unique identity enforcement and data preservation, and
   restore a custom-format backup into a separate database.
 - `docs/DATABASE_OPERATIONS.md` records deployment, backup, restore, rollback,
   ownership, legacy-H2 handling, deletion safety and residual platform work.
+
+## AUTH-10 remediation evidence
+
+- Docker consumes only the JAR produced by complete Maven verification; the
+  previous test-skipping in-image Maven build is removed.
+- Temurin and PostgreSQL references retain readable tags but are locked to
+  reviewed registry digests. The Java process runs as UID/GID `10001:10001`.
+- Image metadata tests enforce non-root identity, anonymous redacted health,
+  SIGTERM, port, proprietary licence and absence of secret-variable history.
+- Compose health, read-only/no-capability runtime restrictions, authenticated
+  registration/login/me smoke and graceful shutdown were exercised together.
+- Required CI builds and scans the final OS/library image only after verification
+  and full-history secret scanning. `docs/CONTAINER_OPERATIONS.md` records safe
+  refresh, rollback, ownership and residual platform responsibilities.
 
 ## AUTH-06 remediation evidence
 
