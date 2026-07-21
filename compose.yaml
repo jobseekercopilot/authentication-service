@@ -1,13 +1,36 @@
 services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: authentication
+      POSTGRES_USER: authentication
+      POSTGRES_PASSWORD: "${AUTH_DB_PASSWORD:?Run ./scripts/generate-local-signing-key.sh first}"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username authentication --dbname authentication"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    volumes:
+      - auth-postgres-data:/var/lib/postgresql/data
+
   authentication-service:
     build:
       context: .
     ports:
       - "${AUTH_PORT:-8084}:8084"
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
+      SPRING_PROFILES_ACTIVE: production
       JWT_SIGNING_KEY: "${JWT_SIGNING_KEY:?Run ./scripts/generate-local-signing-key.sh first}"
-      AUTH_DB_URL: "jdbc:h2:mem:auth-local;DB_CLOSE_DELAY=-1"
+      AUTH_DB_URL: jdbc:postgresql://postgres:5432/authentication
+      AUTH_DB_USERNAME: authentication
+      AUTH_DB_PASSWORD: "${AUTH_DB_PASSWORD:?Run ./scripts/generate-local-signing-key.sh first}"
       AUTH_LOGIN_MAXIMUM_FAILURES: "${AUTH_LOGIN_MAXIMUM_FAILURES:-10}"
       AUTH_LOGIN_ATTEMPT_WINDOW: "${AUTH_LOGIN_ATTEMPT_WINDOW:-15m}"
       AUTH_LOGIN_LOCK_DURATION: "${AUTH_LOGIN_LOCK_DURATION:-15m}"
       AUTH_LOGIN_MAXIMUM_TRACKED_PRINCIPALS: "${AUTH_LOGIN_MAXIMUM_TRACKED_PRINCIPALS:-10000}"
+
+volumes:
+  auth-postgres-data:

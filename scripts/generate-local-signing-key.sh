@@ -13,8 +13,10 @@ fi
 
 umask 077
 signing_key="$(openssl rand -base64 48)"
-printf 'JWT_SIGNING_KEY=%s\n' "${signing_key}" > "${env_file}"
-unset signing_key
+database_password="$(openssl rand -hex 24)"
+printf 'JWT_SIGNING_KEY=%s\nAUTH_DB_PASSWORD=%s\n' \
+  "${signing_key}" "${database_password}" > "${env_file}"
+unset signing_key database_password
 
-echo "Created an ignored, owner-readable .env file. The signing key was not displayed."
+echo "Created an ignored, owner-readable .env file. Secrets were not displayed."
 echo "Replacing this file later invalidates existing local JWTs and requires a new login."
