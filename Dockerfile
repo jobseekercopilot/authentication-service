@@ -9,7 +9,8 @@ LABEL org.opencontainers.image.title="Job Seeker Copilot Authentication Service"
 
 WORKDIR /app
 
-RUN apk add --no-cache curl \
+RUN apk upgrade --no-cache \
+    && apk add --no-cache curl \
     && addgroup -S -g "${APP_GID}" app \
     && adduser -S -D -H -u "${APP_UID}" -G app app
 
