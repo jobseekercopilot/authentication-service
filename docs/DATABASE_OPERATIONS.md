@@ -29,7 +29,8 @@ database password on a command line.
 3. Take and verify a backup before an environment change.
 4. Apply the release to one non-serving instance first. Flyway validates
    checksums and migrates before the application accepts traffic.
-5. Confirm `/actuator/health`, registration, login, refresh rotation, logout, and current-user lookup
+5. Confirm `/actuator/health`, authenticated service-to-service registration,
+   login, refresh rotation, logout, and current-user lookup
    before increasing traffic.
 
 There are no automated down migrations. If an application rollback is needed,

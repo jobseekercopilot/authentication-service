@@ -5,10 +5,13 @@ import com.jobseekercopilot.authenticationservice.model.RegisterRequest;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpEntity;
@@ -25,16 +28,105 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "auth.login.maximum-failures=3",
         "auth.login.attempt-window=15m",
-        "auth.login.lock-duration=15m"
+        "auth.login.lock-duration=15m",
+        "environment-data.enabled=true"
 })
 @AutoConfigureTestRestTemplate
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class AuthenticationServiceIntegrationTest {
 
     private static final String TEST_SIGNING_KEY =
             "test-only-signing-material-never-use-for-local-runtime";
+    private static final String SERVICE_TOKEN = "test-only-authentication-service-token-32-bytes";
+    private static final String ENVIRONMENT_DATA_TOKEN = "test-only-environment-data-token-32-bytes";
+
+    @LocalServerPort
+    private int port;
 
     @Autowired
     private TestRestTemplate restTemplate;
+
+    @BeforeAll
+    void authenticateServiceClient() {
+        restTemplate.getRestTemplate().getInterceptors().add((request, body, execution) -> {
+            request.getHeaders().set("X-Service-Token", SERVICE_TOKEN);
+            return execution.execute(request, body);
+        });
+    }
+
+    @Test
+    void serviceIdentityIsRequiredAndNeverReflected() {
+        TestRestTemplate unauthenticated = new TestRestTemplate();
+        ResponseEntity<Map> missing = unauthenticated.postForEntity(
+                url("/api/auth/login"), new LoginRequest("nobody@example.test", "not-a-password"), Map.class);
+
+        HttpHeaders invalidHeaders = new HttpHeaders();
+        invalidHeaders.setContentType(MediaType.APPLICATION_JSON);
+        invalidHeaders.set("X-Service-Token", "attacker-controlled-value");
+        ResponseEntity<Map> invalid = unauthenticated.exchange(
+                url("/api/auth/login"), HttpMethod.POST,
+                new HttpEntity<>(new LoginRequest("nobody@example.test", "not-a-password"), invalidHeaders),
+                Map.class);
+
+        assertEquals(HttpStatus.UNAUTHORIZED, missing.getStatusCode());
+        assertEquals("SERVICE_AUTHENTICATION_REQUIRED", missing.getBody().get("code"));
+        assertEquals(HttpStatus.UNAUTHORIZED, invalid.getStatusCode());
+        assertEquals(missing.getBody().get("message"), invalid.getBody().get("message"));
+        assertFalse(invalid.getBody().toString().contains("attacker-controlled-value"));
+        assertNotNull(missing.getHeaders().getFirst("X-Correlation-Id"));
+        assertEquals("nosniff", missing.getHeaders().getFirst("X-Content-Type-Options"));
+        assertEquals("DENY", missing.getHeaders().getFirst("X-Frame-Options"));
+        assertTrue(missing.getHeaders().getFirst("Cache-Control").contains("no-store"));
+    }
+
+    @Test
+    void browserCorsPreflightIsNotTrusted() {
+        TestRestTemplate unauthenticated = new TestRestTemplate();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setOrigin("https://untrusted.example");
+        headers.set("Access-Control-Request-Method", "POST");
+
+        ResponseEntity<Map> response = unauthenticated.exchange(
+                url("/api/auth/login"), HttpMethod.OPTIONS, new HttpEntity<>(headers), Map.class);
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertFalse(response.getHeaders().containsHeader("Access-Control-Allow-Origin"));
+    }
+
+    @Test
+    void healthIsPublicButUnknownAndDocumentationRoutesAreDenied() {
+        TestRestTemplate unauthenticated = new TestRestTemplate();
+
+        assertEquals(HttpStatus.OK,
+                unauthenticated.getForEntity(url("/actuator/health"), Map.class).getStatusCode());
+        assertEquals(HttpStatus.UNAUTHORIZED,
+                unauthenticated.getForEntity(url("/not-an-application-route"), Map.class).getStatusCode());
+        assertEquals(HttpStatus.UNAUTHORIZED,
+                unauthenticated.getForEntity(url("/v3/api-docs"), String.class).getStatusCode());
+    }
+
+    @Test
+    void environmentDataRequiresItsSeparateIdentity() {
+        TestRestTemplate client = new TestRestTemplate();
+        HttpHeaders serviceHeaders = new HttpHeaders();
+        serviceHeaders.set("X-Service-Token", SERVICE_TOKEN);
+        HttpHeaders environmentHeaders = new HttpHeaders();
+        environmentHeaders.set("X-Environment-Data-Token", ENVIRONMENT_DATA_TOKEN);
+
+        ResponseEntity<Map> serviceIdentity = client.exchange(
+                url("/internal/system-data/verify/users/absent"), HttpMethod.GET,
+                new HttpEntity<>(serviceHeaders), Map.class);
+        ResponseEntity<Map> environmentIdentity = client.exchange(
+                url("/internal/system-data/verify/users/absent"), HttpMethod.GET,
+                new HttpEntity<>(environmentHeaders), Map.class);
+        ResponseEntity<Map> wrongBoundary = client.exchange(
+                url("/api/auth/me"), HttpMethod.GET,
+                new HttpEntity<>(environmentHeaders), Map.class);
+
+        assertEquals(HttpStatus.UNAUTHORIZED, serviceIdentity.getStatusCode());
+        assertEquals(HttpStatus.OK, environmentIdentity.getStatusCode());
+        assertEquals(HttpStatus.UNAUTHORIZED, wrongBoundary.getStatusCode());
+    }
 
     @Test
     void register_Login_And_GetUser_HappyPath() {
@@ -302,5 +394,9 @@ class AuthenticationServiceIntegrationTest {
 
     private ResponseEntity<Map> login(String email, String password) {
         return restTemplate.postForEntity("/api/auth/login", new LoginRequest(email, password), Map.class);
+    }
+
+    private String url(String path) {
+        return "http://localhost:" + port + path;
     }
 }
