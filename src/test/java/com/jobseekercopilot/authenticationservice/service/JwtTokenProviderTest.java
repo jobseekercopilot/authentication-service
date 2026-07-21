@@ -56,6 +56,9 @@ class JwtTokenProviderTest {
         JwtTokenProvider provider = provider(TestJwtKeys.ACTIVE, Map.of(), "active");
         JwtTokenProvider other = provider(TestJwtKeys.DIFFERENT, Map.of(), "different");
         assertThrows(JwtException.class, () -> provider.parseAccessToken(other.generateToken("user123")));
+        String forgedKnownKeyId = constrainedToken(TestJwtKeys.DIFFERENT, "active",
+                "expected-issuer", "expected-audience", CLOCK.instant().plusSeconds(60));
+        assertThrows(JwtException.class, () -> provider.parseAccessToken(forgedKnownKeyId));
         assertThrows(JwtException.class, () -> provider.parseAccessToken("not-a-jwt"));
 
         String expired = constrainedToken(TestJwtKeys.ACTIVE, "active", "expected-issuer",
