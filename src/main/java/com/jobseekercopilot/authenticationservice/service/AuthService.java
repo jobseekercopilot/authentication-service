@@ -35,6 +35,7 @@ public class AuthService {
     private final PasswordPolicy passwordPolicy;
     private final LoginAttemptService loginAttemptService;
     private final EmailIdentityCanonicalizer emailCanonicalizer;
+    private final SessionTokenService sessionTokenService;
     private final String dummyPasswordHash;
 
     public AuthService(
@@ -43,13 +44,15 @@ public class AuthService {
             JwtTokenProvider jwtTokenProvider,
             PasswordPolicy passwordPolicy,
             LoginAttemptService loginAttemptService,
-            EmailIdentityCanonicalizer emailCanonicalizer) {
+            EmailIdentityCanonicalizer emailCanonicalizer,
+            SessionTokenService sessionTokenService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
         this.passwordPolicy = passwordPolicy;
         this.loginAttemptService = loginAttemptService;
         this.emailCanonicalizer = emailCanonicalizer;
+        this.sessionTokenService = sessionTokenService;
         this.dummyPasswordHash = passwordEncoder.encode(DUMMY_PASSWORD);
     }
 
@@ -128,11 +131,10 @@ public class AuthService {
             userRepository.save(authenticatedUser);
         }
 
-        String token = jwtTokenProvider.generateToken(authenticatedUser.getId());
         log.info("Login succeeded userId={} durationMs={}",
                 authenticatedUser.getId(),
                 (System.nanoTime() - startedAt) / 1_000_000);
-        return new LoginResponse(token);
+        return sessionTokenService.issue(authenticatedUser.getId());
     }
 
     public UserAccountResponse getUserAccount(String userId) {
@@ -153,11 +155,12 @@ public class AuthService {
         }
 
         try {
-            String userId = jwtTokenProvider.getUserIdFromToken(token);
+            AccessTokenClaims claims = jwtTokenProvider.parseAccessToken(token);
+            sessionTokenService.validate(claims);
             log.info("JWT validation succeeded userId={} durationMs={}",
-                    userId,
+                    claims.userId(),
                     (System.nanoTime() - startedAt) / 1_000_000);
-            return userId;
+            return claims.userId();
         } catch (ExpiredJwtException exception) {
             return rejectToken(startedAt, exception, TokenValidationException.expired());
         } catch (MalformedJwtException exception) {
@@ -168,6 +171,23 @@ public class AuthService {
             return rejectToken(startedAt, exception, TokenValidationException.invalid());
         } catch (JwtException | IllegalArgumentException exception) {
             return rejectToken(startedAt, exception, TokenValidationException.invalid());
+        }
+    }
+
+    public LoginResponse refresh(String refreshToken) {
+        return sessionTokenService.rotate(refreshToken);
+    }
+
+    public void logout(String token) {
+        if (token == null || token.isBlank()) {
+            throw TokenValidationException.required();
+        }
+        try {
+            sessionTokenService.revoke(jwtTokenProvider.parseAccessToken(token));
+        } catch (ExpiredJwtException exception) {
+            throw TokenValidationException.expired();
+        } catch (JwtException | IllegalArgumentException exception) {
+            throw TokenValidationException.invalid();
         }
     }
 

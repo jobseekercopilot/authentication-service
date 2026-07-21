@@ -40,6 +40,9 @@ class AuthServiceTest {
     @Mock
     private LoginAttemptService loginAttemptService;
 
+    @Mock
+    private SessionTokenService sessionTokenService;
+
     private AuthService authService;
     private final EmailIdentityCanonicalizer emailCanonicalizer = new EmailIdentityCanonicalizer();
 
@@ -47,7 +50,7 @@ class AuthServiceTest {
     void setUp() {
         when(passwordEncoder.encode("authentication-timing-placeholder")).thenReturn("dummy-hash");
         authService = new AuthService(userRepository, passwordEncoder, jwtTokenProvider,
-                passwordPolicy, loginAttemptService, emailCanonicalizer);
+                passwordPolicy, loginAttemptService, emailCanonicalizer, sessionTokenService);
     }
 
     @Test
@@ -115,7 +118,7 @@ class AuthServiceTest {
 
         when(userRepository.findByCanonicalEmail("john@test.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("A-valid-local password 2026!", "hashed-password")).thenReturn(true);
-        when(jwtTokenProvider.generateToken(userId)).thenReturn("jwt-token");
+        when(sessionTokenService.issue(userId)).thenReturn(new LoginResponse("jwt-token"));
 
         LoginResponse response = authService.login(request);
 
@@ -254,10 +257,12 @@ class AuthServiceTest {
 
     @Test
     void validate_ShouldReturnUserId() {
-        when(jwtTokenProvider.getUserIdFromToken("valid-token")).thenReturn("user-123");
+        AccessTokenClaims claims = new AccessTokenClaims("user-123", "session-123");
+        when(jwtTokenProvider.parseAccessToken("valid-token")).thenReturn(claims);
 
         String result = authService.validate("valid-token");
 
         assertEquals("user-123", result);
+        verify(sessionTokenService).validate(claims);
     }
 }

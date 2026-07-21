@@ -3,6 +3,7 @@ package com.jobseekercopilot.authenticationservice.controller;
 import com.jobseekercopilot.authenticationservice.model.LoginRequest;
 import com.jobseekercopilot.authenticationservice.model.LoginResponse;
 import com.jobseekercopilot.authenticationservice.model.RegisterRequest;
+import com.jobseekercopilot.authenticationservice.model.RefreshRequest;
 import com.jobseekercopilot.authenticationservice.model.UserAccountResponse;
 import com.jobseekercopilot.authenticationservice.service.AuthService;
 import org.junit.jupiter.api.Test;
@@ -68,5 +69,25 @@ class AuthControllerTest {
         assertEquals("John", response.getBody().getName());
         verify(authService, times(1)).validate("valid-token");
         verify(authService, times(1)).getUserAccount(userId);
+    }
+
+    @Test
+    void refreshReturnsRotatedTokenPair() {
+        RefreshRequest request = new RefreshRequest("refresh-token");
+        LoginResponse rotated = new LoginResponse("access", "next-refresh", "Bearer", 900);
+        when(authService.refresh("refresh-token")).thenReturn(rotated);
+
+        ResponseEntity<LoginResponse> response = authController.refresh(request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("next-refresh", response.getBody().getRefreshToken());
+    }
+
+    @Test
+    void logoutRevokesBearerSession() {
+        ResponseEntity<Void> response = authController.logout("Bearer access-token");
+
+        assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
+        verify(authService).logout("access-token");
     }
 }

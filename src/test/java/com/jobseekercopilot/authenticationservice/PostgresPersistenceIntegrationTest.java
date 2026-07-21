@@ -32,7 +32,7 @@ class PostgresPersistenceIntegrationTest {
 
     @Test
     void migratesAnEmptyPostgresDatabaseAndEnforcesIdentityConstraints() throws SQLException {
-        assertEquals(3, flyway().migrate().migrationsExecuted);
+        assertEquals(4, flyway().migrate().migrationsExecuted);
 
         try (Connection connection = connection(); Statement statement = connection.createStatement()) {
             statement.executeUpdate("""
@@ -42,7 +42,6 @@ class PostgresPersistenceIntegrationTest {
                         ('first', 'First User', 'first@example.test', 'first@example.test',
                          'hash', CURRENT_TIMESTAMP, TRUE)
                     """);
-
             SQLException duplicate = org.junit.jupiter.api.Assertions.assertThrows(SQLException.class,
                     () -> statement.executeUpdate("""
                             INSERT INTO users
@@ -52,6 +51,26 @@ class PostgresPersistenceIntegrationTest {
                                  'hash', CURRENT_TIMESTAMP, TRUE)
                             """));
             assertEquals("23505", duplicate.getSQLState());
+
+            statement.executeUpdate("""
+                    INSERT INTO authentication_session
+                        (id, user_id, created_at, expires_at)
+                    VALUES ('session-one', 'first', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '7 days')
+                    """);
+            statement.executeUpdate("""
+                    INSERT INTO refresh_token
+                        (id, session_id, token_hash, issued_at, expires_at)
+                    VALUES ('refresh-one', 'session-one', '%s', CURRENT_TIMESTAMP,
+                            CURRENT_TIMESTAMP + INTERVAL '7 days')
+                    """.formatted("a".repeat(64)));
+            SQLException duplicateToken = assertThrows(SQLException.class,
+                    () -> statement.executeUpdate("""
+                            INSERT INTO refresh_token
+                                (id, session_id, token_hash, issued_at, expires_at)
+                            VALUES ('refresh-two', 'session-one', '%s', CURRENT_TIMESTAMP,
+                                    CURRENT_TIMESTAMP + INTERVAL '7 days')
+                            """.formatted("a".repeat(64))));
+            assertEquals("23505", duplicateToken.getSQLState());
         }
     }
 
@@ -71,7 +90,7 @@ class PostgresPersistenceIntegrationTest {
                     """);
         }
 
-        assertEquals(2, flyway().migrate().migrationsExecuted);
+        assertEquals(3, flyway().migrate().migrationsExecuted);
         try (Connection connection = connection(); Statement statement = connection.createStatement();
                 var result = statement.executeQuery(
                         "SELECT email, canonical_email FROM users WHERE id = 'retained'")) {
@@ -114,6 +133,18 @@ class PostgresPersistenceIntegrationTest {
                         ('backup-user', 'Backup User', 'backup@example.test', 'backup@example.test',
                          'hash', CURRENT_TIMESTAMP, TRUE)
                     """);
+            statement.executeUpdate("""
+                    INSERT INTO authentication_session
+                        (id, user_id, created_at, expires_at)
+                    VALUES ('backup-session', 'backup-user', CURRENT_TIMESTAMP,
+                            CURRENT_TIMESTAMP + INTERVAL '7 days')
+                    """);
+            statement.executeUpdate("""
+                    INSERT INTO refresh_token
+                        (id, session_id, token_hash, issued_at, expires_at)
+                    VALUES ('backup-refresh', 'backup-session', '%s', CURRENT_TIMESTAMP,
+                            CURRENT_TIMESTAMP + INTERVAL '7 days')
+                    """.formatted("b".repeat(64)));
         }
 
         assertSuccessful(POSTGRES.execInContainer(
@@ -126,10 +157,13 @@ class PostgresPersistenceIntegrationTest {
                 "--exit-on-error", "/tmp/authentication.dump"));
         org.testcontainers.containers.Container.ExecResult count = POSTGRES.execInContainer(
                 "psql", "--username", POSTGRES.getUsername(), "--dbname", "authentication_restore",
-                "--tuples-only", "--no-align", "--command", "SELECT COUNT(*) FROM users;");
+                "--tuples-only", "--no-align", "--command",
+                "SELECT (SELECT COUNT(*) FROM users) || ',' || "
+                        + "(SELECT COUNT(*) FROM authentication_session) || ',' || "
+                        + "(SELECT COUNT(*) FROM refresh_token);");
 
         assertSuccessful(count);
-        assertEquals("1", count.getStdout().trim());
+        assertEquals("1,1,1", count.getStdout().trim());
     }
 
     private Flyway flyway() {

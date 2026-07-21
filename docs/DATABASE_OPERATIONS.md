@@ -29,7 +29,7 @@ database password on a command line.
 3. Take and verify a backup before an environment change.
 4. Apply the release to one non-serving instance first. Flyway validates
    checksums and migrates before the application accepts traffic.
-5. Confirm `/actuator/health`, registration, login, and current-user lookup
+5. Confirm `/actuator/health`, registration, login, refresh rotation, logout, and current-user lookup
    before increasing traffic.
 
 There are no automated down migrations. If an application rollback is needed,
@@ -64,6 +64,13 @@ policy only after the drill is signed off.
 The automated PostgreSQL test performs this drill with synthetic data in a
 throwaway container and restores into a distinct database. It never reads or
 modifies developer, staging, production, or user data.
+
+Migration V4 adds `authentication_session` and one-time `refresh_token` rows.
+Refresh-token plaintext is never stored; `token_hash` is a unique SHA-256 digest.
+Session and token rows are account-owned and cascade only when an account is
+deliberately deleted by a future approved lifecycle flow. Expired/revoked-row
+retention and account deletion remain governed by AUTH-08; no automated purge is
+introduced by this migration.
 
 ## Legacy local H2 data
 

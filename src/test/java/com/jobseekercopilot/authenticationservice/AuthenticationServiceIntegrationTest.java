@@ -191,10 +191,16 @@ class AuthenticationServiceIntegrationTest {
         var key = Keys.hmacShaKeyFor(TEST_SIGNING_KEY.getBytes(StandardCharsets.UTF_8));
         Date now = new Date();
         String token = Jwts.builder()
+                .header().keyId("test-key").and()
+                .issuer("test-issuer")
+                .audience().add("test-audience").and()
                 .subject("expired-user")
-                .issuedAt(new Date(now.getTime() - 2_000))
-                .expiration(new Date(now.getTime() - 1_000))
-                .signWith(key)
+                .id("expired-token-id")
+                .claim("sid", "expired-session")
+                .claim("token_type", "access")
+                .issuedAt(new Date(now.getTime() - 120_000))
+                .expiration(new Date(now.getTime() - 60_000))
+                .signWith(key, Jwts.SIG.HS256)
                 .compact();
 
         assertTokenFailure(token, "TOKEN_EXPIRED", "The authentication token has expired.");
@@ -222,6 +228,62 @@ class AuthenticationServiceIntegrationTest {
                 .compact();
 
         assertTokenFailure(token, "TOKEN_INVALID", "The authentication token is invalid.");
+    }
+
+    @Test
+    void refreshRotatesOnceAndReplayRevokesTheCompleteSession() {
+        String email = "refresh-session@example.test";
+        String password = "A refresh session passphrase 2026!";
+        restTemplate.postForEntity("/api/auth/register",
+                new RegisterRequest("Refresh User", email, password), Map.class);
+        ResponseEntity<Map> login = login(email, password);
+        String firstAccess = (String) login.getBody().get("token");
+        String firstRefresh = (String) login.getBody().get("refreshToken");
+
+        ResponseEntity<Map> rotated = restTemplate.postForEntity(
+                "/api/auth/refresh", Map.of("refreshToken", firstRefresh), Map.class);
+        assertEquals(HttpStatus.OK, rotated.getStatusCode());
+        assertNotEquals(firstAccess, rotated.getBody().get("token"));
+        assertNotEquals(firstRefresh, rotated.getBody().get("refreshToken"));
+        assertEquals("Bearer", rotated.getBody().get("tokenType"));
+        assertEquals(900, rotated.getBody().get("expiresIn"));
+
+        ResponseEntity<Map> replay = restTemplate.postForEntity(
+                "/api/auth/refresh", Map.of("refreshToken", firstRefresh), Map.class);
+        assertEquals(HttpStatus.UNAUTHORIZED, replay.getStatusCode());
+        assertEquals("REFRESH_TOKEN_REUSED", replay.getBody().get("code"));
+        assertFalse(replay.getBody().toString().contains(firstRefresh));
+
+        assertTokenFailure((String) rotated.getBody().get("token"),
+                "TOKEN_INVALID", "The authentication token is invalid.");
+        ResponseEntity<Map> revokedRefresh = restTemplate.postForEntity(
+                "/api/auth/refresh",
+                Map.of("refreshToken", rotated.getBody().get("refreshToken")), Map.class);
+        assertEquals(HttpStatus.UNAUTHORIZED, revokedRefresh.getStatusCode());
+        assertEquals("REFRESH_TOKEN_INVALID", revokedRefresh.getBody().get("code"));
+    }
+
+    @Test
+    void logoutImmediatelyInvalidatesTheCurrentAccessAndRefreshTokens() {
+        String email = "logout-session@example.test";
+        String password = "A logout session passphrase 2026!";
+        restTemplate.postForEntity("/api/auth/register",
+                new RegisterRequest("Logout User", email, password), Map.class);
+        ResponseEntity<Map> login = login(email, password);
+        String access = (String) login.getBody().get("token");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(access);
+        ResponseEntity<Void> logout = restTemplate.exchange(
+                "/api/auth/logout", HttpMethod.POST, new HttpEntity<>(headers), Void.class);
+        assertEquals(HttpStatus.NO_CONTENT, logout.getStatusCode());
+
+        assertTokenFailure(access, "TOKEN_INVALID", "The authentication token is invalid.");
+        ResponseEntity<Map> refresh = restTemplate.postForEntity(
+                "/api/auth/refresh",
+                Map.of("refreshToken", login.getBody().get("refreshToken")), Map.class);
+        assertEquals(HttpStatus.UNAUTHORIZED, refresh.getStatusCode());
+        assertEquals("REFRESH_TOKEN_INVALID", refresh.getBody().get("code"));
     }
 
     private void assertTokenFailure(String token, String expectedCode, String expectedMessage) {
