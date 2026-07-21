@@ -22,6 +22,8 @@ short-lived access/refresh session issue, rotation, revocation and current-accou
 | `AUTH_DB_USERNAME` | `authentication` locally | Database principal |
 | `AUTH_DB_PASSWORD` | none; required | Database secret |
 | `JWT_SIGNING_KEY` | none; required | Access-token signing key (minimum 32 UTF-8 bytes) |
+| `AUTH_SERVICE_TOKEN` | none; required | Minimum 32-byte identity shared only with user-management-gateway |
+| `AUTH_ENVIRONMENT_DATA_TOKEN` | none; required | Distinct minimum 32-byte identity for non-production system-data tooling |
 | `JWT_ACCESS_TOKEN_EXPIRATION_MS` | `900000` (15 minutes) | Access-token lifetime; startup rejects values above one hour |
 | `JWT_ISSUER` | `job-seeker-copilot-authentication` | Required access-token issuer |
 | `JWT_AUDIENCE` | `job-seeker-copilot-services` | Required access-token audience |
@@ -44,7 +46,20 @@ The local key belongs only in the ignored `.env` file generated below.
 - `POST /api/auth/refresh`
 - `POST /api/auth/logout` with bearer token
 - `GET /api/auth/me` with bearer token
-- `/v3/api-docs`, `/swagger-ui/index.html`, `/actuator/health`
+- `/actuator/health` (the only unauthenticated route)
+
+Every `/api/auth/**` request also requires `X-Service-Token`; this is injected
+by user-management-gateway and is not a browser credential. The separately
+guarded `/internal/system-data/**` routes require `X-Environment-Data-Token`
+and remain disabled unless the environment-data profile/property policy permits
+them. The two values must be distinct and at least 32 bytes. Requests to all
+other routes are denied by default. CORS is not enabled because callers are
+server-side services, and CSRF is disabled because this service does not accept
+cookie authentication.
+
+OpenAPI and Swagger are available only outside production for trusted local
+development and require the service identity header. H2, API docs, Swagger UI
+and detailed health are disabled in the production profile.
 
 Failures use a stable version 1 JSON contract:
 
