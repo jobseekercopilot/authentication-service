@@ -36,6 +36,11 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.UNAUTHORIZED, exception.getCode(), exception.getMessage());
     }
 
+    @ExceptionHandler(RefreshTokenException.class)
+    public ResponseEntity<ErrorResponse> handleRefreshToken(RefreshTokenException exception) {
+        return response(HttpStatus.UNAUTHORIZED, exception.getCode(), exception.getMessage());
+    }
+
     @ExceptionHandler(LoginRateLimitException.class)
     public ResponseEntity<ErrorResponse> handleLoginRateLimit(LoginRateLimitException exception) {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)

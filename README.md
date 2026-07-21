@@ -1,9 +1,9 @@
 # Authentication Service
 
 Spring Boot service for account registration, adaptive password verification,
-JWT access-token issue and current-account lookup.
+short-lived access/refresh session issue, rotation, revocation and current-account lookup.
 
-> Beta status: not beta-ready. Token lifecycle, endpoint controls, account
+> Beta status: not beta-ready. Endpoint controls, account
 > lifecycle, and broader security coverage remain blockers. See
 > [the audit](docs/BETA_READINESS_AUDIT.md).
 
@@ -22,7 +22,12 @@ JWT access-token issue and current-account lookup.
 | `AUTH_DB_USERNAME` | `authentication` locally | Database principal |
 | `AUTH_DB_PASSWORD` | none; required | Database secret |
 | `JWT_SIGNING_KEY` | none; required | Access-token signing key (minimum 32 UTF-8 bytes) |
-| `jwt.expiration` | `86400000` | Temporary access-token lifetime (ms) |
+| `JWT_ACCESS_TOKEN_EXPIRATION_MS` | `900000` (15 minutes) | Access-token lifetime; startup rejects values above one hour |
+| `JWT_ISSUER` | `job-seeker-copilot-authentication` | Required access-token issuer |
+| `JWT_AUDIENCE` | `job-seeker-copilot-services` | Required access-token audience |
+| `JWT_KEY_ID` | `primary` | Signing-key identifier placed in `kid` |
+| `JWT_CLOCK_SKEW_SECONDS` | `30` | Accepted clock skew; maximum 300 seconds |
+| `AUTH_REFRESH_TOKEN_LIFETIME` | `7d` | Absolute server-side session and refresh lifetime |
 | `AUTH_LOGIN_MAXIMUM_FAILURES` | `10` | Failed logins allowed per normalized principal and attempt window |
 | `AUTH_LOGIN_ATTEMPT_WINDOW` | `15m` | Window in which failed logins accumulate |
 | `AUTH_LOGIN_LOCK_DURATION` | `15m` | Automatic recovery delay after the threshold |
@@ -36,6 +41,8 @@ The local key belongs only in the ignored `.env` file generated below.
 
 - `POST /api/auth/register`
 - `POST /api/auth/login`
+- `POST /api/auth/refresh`
+- `POST /api/auth/logout` with bearer token
 - `GET /api/auth/me` with bearer token
 - `/v3/api-docs`, `/swagger-ui/index.html`, `/actuator/health`
 
@@ -58,6 +65,15 @@ Missing, expired, malformed, unsupported and invalid tokens return `401` with
 use `REQUEST_VALIDATION_FAILED`, `ACCOUNT_ALREADY_EXISTS`,
 `TOO_MANY_AUTHENTICATION_ATTEMPTS` and `INTERNAL_ERROR`. Parser messages,
 exception causes, credentials and complete tokens are never returned.
+
+Login and refresh return `token` (the access JWT), `refreshToken`, `tokenType`
+and `expiresIn` seconds. `token` remains the access-token field for gateway
+compatibility. Refresh tokens are opaque, rotate on every use and are stored
+only as SHA-256 hashes. Reusing a consumed refresh token revokes its whole
+session. Logout also revokes the server-side session, so an otherwise unexpired
+access token immediately fails validation. Browser code must not persist either
+token: the later BFF/client work owns its Secure, HttpOnly cookie boundary. See
+[session security](docs/SESSION_SECURITY.md) for the contract and threat model.
 
 ```bash
 mvn -B verify
