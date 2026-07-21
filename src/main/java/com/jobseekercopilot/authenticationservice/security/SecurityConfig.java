@@ -41,6 +41,7 @@ public class SecurityConfig {
                                 "ACCESS_DENIED", "Access is denied.")))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        .requestMatchers("/.well-known/jwks.json").permitAll()
                         .requestMatchers("/internal/system-data/**")
                         .hasAuthority(ServiceIdentityFilter.ENVIRONMENT_DATA_AUTHORITY)
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")

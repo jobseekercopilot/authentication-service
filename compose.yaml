@@ -39,7 +39,9 @@ services:
       retries: 6
     environment:
       SPRING_PROFILES_ACTIVE: production
-      JWT_SIGNING_KEY: "${JWT_SIGNING_KEY:?Run ./scripts/generate-local-signing-key.sh first}"
+      JWT_PRIVATE_KEY_BASE64: "${JWT_PRIVATE_KEY_BASE64:?Run ./scripts/generate-local-signing-key.sh first}"
+      JWT_PUBLIC_KEY_BASE64: "${JWT_PUBLIC_KEY_BASE64:?Run ./scripts/generate-local-signing-key.sh first}"
+      JWT_PREVIOUS_PUBLIC_KEYS: "${JWT_PREVIOUS_PUBLIC_KEYS:-}"
       AUTH_DB_URL: jdbc:postgresql://postgres:5432/authentication
       AUTH_DB_USERNAME: authentication
       AUTH_DB_PASSWORD: "${AUTH_DB_PASSWORD:?Run ./scripts/generate-local-signing-key.sh first}"

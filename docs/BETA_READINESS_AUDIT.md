@@ -49,16 +49,17 @@ result is a blocking, incomplete security baseline—not a clean scan.
 
 ## AUTH-01 remediation evidence
 
-- Runtime configuration uses required `JWT_SIGNING_KEY`; no source fallback or
-  hard-coded runtime value exists.
-- Missing, blank and values shorter than 32 UTF-8 bytes fail safely without
-  including key material in the error.
+- Runtime configuration uses a required matching RSA private/public pair; no
+  source fallback or hard-coded runtime value exists.
+- Missing, malformed, mismatched and RSA keys below 2048 bits fail safely
+  without including key material in the error.
 - The local Compose path injects an ignored `.env` value generated without
   displaying it; `.env.example` is a blank placeholder only.
 - Test-only signing material is isolated under `src/test` and is not reused by
   the local runtime.
-- Token tests cover current-key success, different-key rejection, expiry and
-  malformed input. Startup/configuration tests cover missing and weak keys.
+- Token tests cover RS256, current/previous key success, unknown-key rejection,
+  expiry and malformed input. Startup tests cover missing, malformed, weak and
+  mismatched keys. Public JWKS responses contain no private key parameters.
 - Full Maven, Compose authentication and complete-history secret-scan evidence
   is recorded in AUTH-01 and its pull request.
 

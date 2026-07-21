@@ -3,10 +3,10 @@
 ## Token model
 
 Successful login creates one durable session and returns a 15-minute access JWT
-plus a 256-bit opaque refresh token. Access JWTs are signed only with HS256 and
+plus a 256-bit opaque refresh token. Access JWTs are signed only with RS256 and
 carry `kid`, `iss`, `aud`, `sub`, `jti`, `sid`, `iat`, `exp`, and
 `token_type=access`. Validation fixes the algorithm and requires the configured
-key ID, issuer, audience, type, bounded clock skew, and an active matching
+known key ID, issuer, audience, type, bounded clock skew, and an active matching
 server-side session.
 
 The refresh token is a bearer secret. Only its SHA-256 digest is persisted.
@@ -36,13 +36,14 @@ should use correlation IDs and stable error codes.
 
 ## Rotation and recovery
 
-Change `JWT_KEY_ID` whenever the signing key changes. This implementation has
-one active symmetric key; replacing it invalidates current access JWTs, while
-the durable session can obtain a new access token through refresh. A signing-key
-compromise requires rotating the secret and revoking affected sessions. The
-platform owner supplies keys through the secret manager and keeps service clocks
-synchronized; the configured skew is a tolerance, not a substitute for time
-monitoring.
+Change `JWT_KEY_ID` whenever the signing key changes. The service signs only
+with the active RSA private key and publishes active plus configured previous
+public keys at `/.well-known/jwks.json`. Keep an old public key through the
+maximum token lifetime, skew and downstream JWKS cache window, then remove it.
+A private-key compromise requires a new pair and revocation of affected sessions;
+never configure an old private key as overlap material. The platform owner
+supplies private material through the secret manager and keeps clocks
+synchronized.
 
 Refresh lifetime is an absolute session boundary and does not slide during
 rotation. A legitimate concurrent double refresh intentionally revokes the

@@ -1,4 +1,5 @@
-# Reviewed historical false positives: synthetic JWT test fixture and README examples.
+# Reviewed historical false positives: synthetic test fixtures and README examples.
+6b6b2850f7e8300bcfde8f1db463efdf6d688147:src/test/java/com/jobseekercopilot/authenticationservice/exception/GlobalExceptionHandlerTest.java:generic-api-key:24
 ce951d7c8ff9a427337a9cea764253297b6e578b:src/test/java/com/jobseekercopilot/authenticationservice/service/JwtTokenProviderTest.java:generic-api-key:18
 6399a535459f9c87be4653f375662de59932a4f7:src/test/java/com/jobseekercopilot/authenticationservice/service/JwtTokenProviderTest.java:generic-api-key:18
 7628eebdafda35870277666755ad2dd60a4edd77:src/test/java/com/jobseekercopilot/authenticationservice/service/JwtTokenProviderTest.java:generic-api-key:18
