@@ -5,6 +5,7 @@ import com.jobseekercopilot.authenticationservice.exception.LoginRateLimitExcept
 import com.jobseekercopilot.authenticationservice.exception.ResourceNotFoundException;
 import com.jobseekercopilot.authenticationservice.exception.UnauthorizedException;
 import com.jobseekercopilot.authenticationservice.exception.TokenValidationException;
+import com.jobseekercopilot.authenticationservice.identity.EmailIdentityCanonicalizer;
 import com.jobseekercopilot.authenticationservice.model.*;
 import com.jobseekercopilot.authenticationservice.repository.UserRepository;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -14,6 +15,7 @@ import io.jsonwebtoken.UnsupportedJwtException;
 import io.jsonwebtoken.security.SecurityException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -32,6 +34,7 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final PasswordPolicy passwordPolicy;
     private final LoginAttemptService loginAttemptService;
+    private final EmailIdentityCanonicalizer emailCanonicalizer;
     private final String dummyPasswordHash;
 
     public AuthService(
@@ -39,12 +42,14 @@ public class AuthService {
             PasswordEncoder passwordEncoder,
             JwtTokenProvider jwtTokenProvider,
             PasswordPolicy passwordPolicy,
-            LoginAttemptService loginAttemptService) {
+            LoginAttemptService loginAttemptService,
+            EmailIdentityCanonicalizer emailCanonicalizer) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
         this.passwordPolicy = passwordPolicy;
         this.loginAttemptService = loginAttemptService;
+        this.emailCanonicalizer = emailCanonicalizer;
         this.dummyPasswordHash = passwordEncoder.encode(DUMMY_PASSWORD);
     }
 
@@ -54,10 +59,10 @@ public class AuthService {
         passwordPolicy.validateRegistration(request);
 
         String name = request.getName().trim();
-        String email = request.getEmail().trim();
+        var emailIdentity = emailCanonicalizer.normalize(request.getEmail());
         String password = request.getPassword();
 
-        if (userRepository.findByEmail(email).isPresent()) {
+        if (userRepository.findByCanonicalEmail(emailIdentity.canonical()).isPresent()) {
             log.warn("Registration rejected reason=EmailAlreadyExists durationMs={}",
                     (System.nanoTime() - startedAt) / 1_000_000);
             throw new ConflictException("An account with this email already exists.");
@@ -67,13 +72,21 @@ public class AuthService {
         User user = new User(
                 UUID.randomUUID().toString(),
                 name,
-                email,
+                emailIdentity.display(),
+                emailIdentity.canonical(),
                 hashedPassword,
                 LocalDateTime.now(),
                 true
         );
 
-        User saved = userRepository.save(user);
+        User saved;
+        try {
+            saved = userRepository.save(user);
+        } catch (DataIntegrityViolationException exception) {
+            log.warn("Registration rejected reason=IdentityConstraintConflict durationMs={}",
+                    (System.nanoTime() - startedAt) / 1_000_000);
+            throw new ConflictException("An account with this email already exists.");
+        }
         log.info("User registered userId={} durationMs={}",
                 saved.getId(),
                 (System.nanoTime() - startedAt) / 1_000_000);
@@ -82,11 +95,14 @@ public class AuthService {
     public LoginResponse login(LoginRequest request) {
         long startedAt = System.nanoTime();
         log.info("Login request validation started hasRequest={}", request != null);
-        String email = request == null || request.getEmail() == null ? "" : request.getEmail().trim();
+        String email = emailCanonicalizer.normalize(
+                request == null ? null : request.getEmail()).canonical();
         String password = request == null || request.getPassword() == null ? "" : request.getPassword();
 
         long retryAfter = loginAttemptService.retryAfterSecondsIfBlocked(email);
-        var user = email.isEmpty() ? java.util.Optional.<User>empty() : userRepository.findByEmail(email);
+        var user = email.isEmpty()
+                ? java.util.Optional.<User>empty()
+                : userRepository.findByCanonicalEmail(email);
         String storedHash = user.map(User::getPasswordHash).orElse(dummyPasswordHash);
         boolean passwordMatches = passwordEncoder.matches(password, storedHash);
 

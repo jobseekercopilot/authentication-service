@@ -1,5 +1,6 @@
 package com.jobseekercopilot.authenticationservice.systemdata;
 
+import com.jobseekercopilot.authenticationservice.identity.EmailIdentityCanonicalizer;
 import com.jobseekercopilot.authenticationservice.model.User;
 import com.jobseekercopilot.authenticationservice.repository.UserRepository;
 import org.springframework.http.ResponseEntity;
@@ -22,24 +23,29 @@ public class AuthenticationSystemDataController {
     private final EnvironmentDataGuard guard;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final EmailIdentityCanonicalizer emailCanonicalizer;
 
     public AuthenticationSystemDataController(
             EnvironmentDataGuard guard,
             UserRepository userRepository,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            EmailIdentityCanonicalizer emailCanonicalizer) {
         this.guard = guard;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.emailCanonicalizer = emailCanonicalizer;
     }
 
     @PostMapping("/seed/user")
     public ResponseEntity<SystemDataResult> seedUser(@RequestBody SystemDataUserRequest request) {
         guard.requireEnabled();
-        userRepository.findByEmail(request.email()).ifPresent(userRepository::delete);
+        var emailIdentity = emailCanonicalizer.normalize(request.email());
+        userRepository.findByCanonicalEmail(emailIdentity.canonical()).ifPresent(userRepository::delete);
         User saved = userRepository.save(new User(
                 request.userId(),
                 request.name(),
-                request.email(),
+                emailIdentity.display(),
+                emailIdentity.canonical(),
                 passwordEncoder.encode(request.password()),
                 request.createdAt() == null ? LocalDateTime.now() : request.createdAt(),
                 true));

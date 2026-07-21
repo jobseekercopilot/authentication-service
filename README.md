@@ -81,6 +81,13 @@ checking service. New passwords use PBKDF2, while a successful login with a
 legacy BCrypt hash transparently upgrades that hash. Login failures do not
 disclose whether an account exists or is inactive.
 
+Email display casing is preserved, while registration, login, uniqueness, and
+local throttling use one migration-backed canonical identity across case,
+Unicode normalization, internationalised-domain, and edge-space variants.
+Provider-specific dot and `+tag` rewriting is not performed. See the
+[email identity policy](docs/EMAIL_IDENTITY.md) for the exact rules, migration
+collision behavior, security rationale, tests, and residual risk.
+
 Failed logins are tracked by a SHA-256 digest of the normalized email, not the
 email itself. The local service blocks at the configured threshold and returns
 HTTP `429` with `Retry-After`; access recovers automatically after the lock

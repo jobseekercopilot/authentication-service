@@ -1,6 +1,7 @@
 package com.jobseekercopilot.authenticationservice;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
@@ -31,18 +32,24 @@ class PostgresPersistenceIntegrationTest {
 
     @Test
     void migratesAnEmptyPostgresDatabaseAndEnforcesIdentityConstraints() throws SQLException {
-        assertEquals(2, flyway().migrate().migrationsExecuted);
+        assertEquals(3, flyway().migrate().migrationsExecuted);
 
         try (Connection connection = connection(); Statement statement = connection.createStatement()) {
             statement.executeUpdate("""
-                    INSERT INTO users (id, name, email, password_hash, created_at, active)
-                    VALUES ('first', 'First User', 'first@example.test', 'hash', CURRENT_TIMESTAMP, TRUE)
+                    INSERT INTO users
+                        (id, name, email, canonical_email, password_hash, created_at, active)
+                    VALUES
+                        ('first', 'First User', 'first@example.test', 'first@example.test',
+                         'hash', CURRENT_TIMESTAMP, TRUE)
                     """);
 
             SQLException duplicate = org.junit.jupiter.api.Assertions.assertThrows(SQLException.class,
                     () -> statement.executeUpdate("""
-                            INSERT INTO users (id, name, email, password_hash, created_at, active)
-                            VALUES ('second', 'Second User', 'first@example.test', 'hash', CURRENT_TIMESTAMP, TRUE)
+                            INSERT INTO users
+                                (id, name, email, canonical_email, password_hash, created_at, active)
+                            VALUES
+                                ('second', 'Second User', 'first@example.test', 'first@example.test',
+                                 'hash', CURRENT_TIMESTAMP, TRUE)
                             """));
             assertEquals("23505", duplicate.getSQLState());
         }
@@ -64,12 +71,36 @@ class PostgresPersistenceIntegrationTest {
                     """);
         }
 
-        assertEquals(1, flyway().migrate().migrationsExecuted);
+        assertEquals(2, flyway().migrate().migrationsExecuted);
         try (Connection connection = connection(); Statement statement = connection.createStatement();
-                var result = statement.executeQuery("SELECT COUNT(*) FROM users WHERE id = 'retained'")) {
+                var result = statement.executeQuery(
+                        "SELECT email, canonical_email FROM users WHERE id = 'retained'")) {
             assertTrue(result.next());
-            assertEquals(1, result.getInt(1));
+            assertEquals("retained@example.test", result.getString("email"));
+            assertEquals("retained@example.test", result.getString("canonical_email"));
         }
+    }
+
+    @Test
+    void refusesAmbiguousLegacyCanonicalIdentitiesWithoutExposingThem() throws SQLException {
+        Flyway versionTwo = Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .cleanDisabled(false)
+                .target("2")
+                .load();
+        versionTwo.migrate();
+        try (Connection connection = connection(); Statement statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                    INSERT INTO users (id, name, email, password_hash, created_at, active) VALUES
+                    ('case-one', 'First User', 'User@example.test', 'hash', CURRENT_TIMESTAMP, TRUE),
+                    ('case-two', 'Second User', 'user@example.test', 'hash', CURRENT_TIMESTAMP, TRUE)
+                    """);
+        }
+
+        Exception failure = assertThrows(Exception.class, () -> flyway().migrate());
+
+        assertTrue(rootMessage(failure).contains("duplicate identities"));
+        assertTrue(!rootMessage(failure).contains("User@example.test"));
     }
 
     @Test
@@ -77,8 +108,11 @@ class PostgresPersistenceIntegrationTest {
         flyway().migrate();
         try (Connection connection = connection(); Statement statement = connection.createStatement()) {
             statement.executeUpdate("""
-                    INSERT INTO users (id, name, email, password_hash, created_at, active)
-                    VALUES ('backup-user', 'Backup User', 'backup@example.test', 'hash', CURRENT_TIMESTAMP, TRUE)
+                    INSERT INTO users
+                        (id, name, email, canonical_email, password_hash, created_at, active)
+                    VALUES
+                        ('backup-user', 'Backup User', 'backup@example.test', 'backup@example.test',
+                         'hash', CURRENT_TIMESTAMP, TRUE)
                     """);
         }
 
@@ -112,5 +146,13 @@ class PostgresPersistenceIntegrationTest {
 
     private void assertSuccessful(org.testcontainers.containers.Container.ExecResult result) {
         assertEquals(0, result.getExitCode(), result.getStderr());
+    }
+
+    private String rootMessage(Throwable failure) {
+        Throwable current = failure;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current.getMessage();
     }
 }
