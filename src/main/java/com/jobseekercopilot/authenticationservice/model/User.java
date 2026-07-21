@@ -29,6 +29,9 @@ public class User {
     @Column(name = "email", nullable = false, unique = true, length = 255)
     private String email;
 
+    @Column(name = "canonical_email", nullable = false, unique = true, length = 254)
+    private String canonicalEmail;
+
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 
@@ -37,4 +40,5 @@ public class User {
 
     @Column(name = "active", nullable = false)
     private boolean active = true;
+
 }

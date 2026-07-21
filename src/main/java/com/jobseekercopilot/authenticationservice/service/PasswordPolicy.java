@@ -1,6 +1,7 @@
 package com.jobseekercopilot.authenticationservice.service;
 
 import com.jobseekercopilot.authenticationservice.exception.BadRequestException;
+import com.jobseekercopilot.authenticationservice.identity.EmailIdentityCanonicalizer;
 import com.jobseekercopilot.authenticationservice.model.RegisterRequest;
 import org.springframework.stereotype.Component;
 
@@ -30,6 +31,11 @@ public class PasswordPolicy {
             "welcome123456789",
             "changemechangeme"
     );
+    private final EmailIdentityCanonicalizer emailCanonicalizer;
+
+    public PasswordPolicy(EmailIdentityCanonicalizer emailCanonicalizer) {
+        this.emailCanonicalizer = emailCanonicalizer;
+    }
 
     public void validateRegistration(RegisterRequest request) {
         if (request == null || request.getEmail() == null || request.getPassword() == null
@@ -38,13 +44,16 @@ public class PasswordPolicy {
         }
 
         String name = request.getName().trim();
-        String email = request.getEmail().trim();
+        var emailIdentity = emailCanonicalizer.normalize(request.getEmail());
+        String email = emailIdentity.display();
         String password = request.getPassword();
 
         if (name.isEmpty() || name.codePointCount(0, name.length()) > MAXIMUM_NAME_LENGTH) {
             throw new BadRequestException("Name must contain between 1 and 100 characters.");
         }
-        if (email.isEmpty() || email.length() > MAXIMUM_EMAIL_LENGTH || !EMAIL.matcher(email).matches()) {
+        if (email.isEmpty() || email.length() > MAXIMUM_EMAIL_LENGTH
+                || emailIdentity.canonical().length() > MAXIMUM_EMAIL_LENGTH
+                || !EMAIL.matcher(email).matches()) {
             throw new BadRequestException("Enter a valid email address.");
         }
 
@@ -55,11 +64,11 @@ public class PasswordPolicy {
 
         String comparison = Normalizer.normalize(password, Normalizer.Form.NFKC)
                 .toLowerCase(Locale.ROOT);
-        String emailIdentity = email.substring(0, email.indexOf('@')).toLowerCase(Locale.ROOT);
+        String emailLocalPart = emailIdentity.canonical().substring(0, emailIdentity.canonical().indexOf('@'));
         if (BLOCKED_PASSWORDS.contains(comparison)
                 || comparison.equals(name.toLowerCase(Locale.ROOT))
-                || comparison.equals(email.toLowerCase(Locale.ROOT))
-                || comparison.equals(emailIdentity)) {
+                || comparison.equals(emailIdentity.canonical())
+                || comparison.equals(emailLocalPart)) {
             throw new BadRequestException("Choose a password that is not commonly used or based on account details.");
         }
     }

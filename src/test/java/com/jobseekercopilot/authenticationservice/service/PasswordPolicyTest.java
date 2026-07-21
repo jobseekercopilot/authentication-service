@@ -1,6 +1,7 @@
 package com.jobseekercopilot.authenticationservice.service;
 
 import com.jobseekercopilot.authenticationservice.exception.BadRequestException;
+import com.jobseekercopilot.authenticationservice.identity.EmailIdentityCanonicalizer;
 import com.jobseekercopilot.authenticationservice.model.RegisterRequest;
 import org.junit.jupiter.api.Test;
 
@@ -9,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class PasswordPolicyTest {
 
-    private final PasswordPolicy policy = new PasswordPolicy();
+    private final PasswordPolicy policy = new PasswordPolicy(new EmailIdentityCanonicalizer());
 
     @Test
     void acceptsLongUnicodePassphraseWithoutCompositionRules() {

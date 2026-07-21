@@ -38,7 +38,7 @@ result is a blocking, incomplete security baseline—not a clean scan.
 | [AUTH-03](https://github.com/jobseekercopilot/authentication-service/issues/3) | Implement a complete token/session lifecycle | JWT has only subject/iat/exp, lasts 24 hours, and has no issuer, audience, key ID, refresh rotation, revocation or server logout. | **High / P1 security:** stolen tokens remain usable and consumers cannot constrain issuer/audience. | Design short-lived access plus rotated refresh/session; validate issuer/audience/algorithm; support revocation/logout and rotation; test expiry, replay and clock skew. | Client session redesign. | Yes | XL |
 | [AUTH-04](https://github.com/jobseekercopilot/authentication-service/issues/4) | Protect service and environment-data endpoints | The service uses crypto but no Spring Security filter chain; `/internal/system-data` is guarded only by profile/property logic; H2 console and detailed health are enabled. | **High / P1 security:** direct network access can bypass intended gateway controls and expose management/dev functions. | Deny direct public access, authenticate service calls, make internal endpoints separately authorised, disable H2/Swagger/detailed health in production and test the production profile. | Service identity/network design. | Yes | L |
 | [AUTH-05](https://github.com/jobseekercopilot/authentication-service/issues/5) | Replace H2/`ddl-auto=update` with production persistence and migrations | **Remediated:** PostgreSQL is the supported runtime, Flyway owns versioned schema changes, Hibernate validates only, and runtime SQL/H2 exposure is disabled. | Migration drift and weak runtime durability defaults are removed; managed provisioning and exercised environment restore remain operational responsibilities. | Retain empty/previous migration, constraint and isolated backup/restore tests; follow the database runbook for every release. | PostgreSQL platform provisioning and backup automation before deployment. | No | L |
-| [AUTH-06](https://github.com/jobseekercopilot/authentication-service/issues/6) | Canonicalise email identity safely | Registration/login trim but do not lower/canonicalise; database uniqueness is implementation/collation dependent. | **Medium / P1 data:** case variants can create duplicate or inaccessible identities. | Define canonicalisation and display preservation, enforce a canonical unique column and migrate/test case/Unicode/whitespace variants. | Database migration. | Yes | M |
+| [AUTH-06](https://github.com/jobseekercopilot/authentication-service/issues/6) | Canonicalise email identity safely | **Remediated:** display and canonical representations are separate; all identity operations share an NFKC/case/IDNA key backed by a non-null unique constraint. | Duplicate/inaccessible case, Unicode and edge-space identities are prevented; visually confusable addresses remain a support risk. | Retain policy, integration and migration-collision regression tests; never add provider-specific rewriting without collision analysis. | AUTH-05 complete. | No | M |
 | [AUTH-07](https://github.com/jobseekercopilot/authentication-service/issues/7) | Return stable non-leaking authentication errors | **Remediated:** known token and request failures map to stable versioned codes with correlation IDs; unknown failures return a redacted 500. | **High / P1 security/API, mitigated:** invalid tokens no longer become leaking parser/internal failures. | Keep version 1 codes backward compatible and use correlation IDs rather than exposing causes. | UMG-04 safe-error pattern complete. | No | M |
 | [AUTH-08](https://github.com/jobseekercopilot/authentication-service/issues/8) | Decide and implement account lifecycle capabilities | Password change/reset, logout/revocation, deletion and retention/export flows are absent. | **High / P1 functional/privacy:** controlled-beta account support and deletion obligations are undefined. | Record beta decisions; implement required endpoints with re-authentication, audit events and tests, or explicitly defer with accepted risk/runbook. | AUTH-03 and privacy decision. | Yes | L |
 | [AUTH-09](https://github.com/jobseekercopilot/authentication-service/issues/9) | Expand security and integration testing | No rate-limit, enumeration, cross-service auth, revocation, production-config or migration tests exist. | **High / P1 testing:** high-risk controls lack regression evidence. | Add unit/integration/contract/security tests plus full path coverage; run network-binding integration in CI. | AUTH-02–08. | Yes | L |
@@ -123,6 +123,21 @@ result is a blocking, incomplete security baseline—not a clean scan.
 - `docs/DATABASE_OPERATIONS.md` records deployment, backup, restore, rollback,
   ownership, legacy-H2 handling, deletion safety and residual platform work.
 
-AUTH-01, AUTH-02, AUTH-05, AUTH-07 and AUTH-11 are resolved. Token/session lifecycle,
+## AUTH-06 remediation evidence
+
+- One canonicalizer strips Unicode edge space, applies NFKC and locale-stable
+  lowercase, and converts internationalised domains to their ASCII IDNA form.
+- Registration, login, duplicate detection, environment-data seeding and the
+  login limiter use `canonical_email`; the owner-facing API preserves the NFC
+  display address and does not expose the internal lookup key.
+- Flyway V3 backfills existing rows transactionally and adds a non-null unique
+  constraint. A legacy collision aborts with a redacted error and no deletion
+  or automatic account choice.
+- Unit, HTTP and real PostgreSQL tests cover case, Unicode, whitespace, IDNA,
+  duplicates, display preservation, backfill, uniqueness and collision rollback.
+- `docs/EMAIL_IDENTITY.md` records the exact policy, excluded provider-specific
+  rewrites, operational collision handling and residual confusable-address risk.
+
+AUTH-01, AUTH-02, AUTH-05, AUTH-06, AUTH-07 and AUTH-11 are resolved. Token/session lifecycle,
 distributed gateway controls and production provisioning remain open, so the
 service is still **not beta-ready**.

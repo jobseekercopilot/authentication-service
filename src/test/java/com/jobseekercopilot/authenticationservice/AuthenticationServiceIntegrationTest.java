@@ -73,6 +73,35 @@ class AuthenticationServiceIntegrationTest {
     }
 
     @Test
+    void canonicalEmailVariantsShareOneAccountWhileDisplayAddressIsPreserved() {
+        String password = "A canonical identity passphrase 2026!";
+        ResponseEntity<Map> registration = restTemplate.postForEntity(
+                "/api/auth/register",
+                new RegisterRequest("Canonical User", "\u00a0Case.User@Example.Test\u2003", password),
+                Map.class);
+        ResponseEntity<Map> duplicate = restTemplate.postForEntity(
+                "/api/auth/register",
+                new RegisterRequest("Duplicate User", "case.user@example.test", password),
+                Map.class);
+        ResponseEntity<Map> login = restTemplate.postForEntity(
+                "/api/auth/login",
+                new LoginRequest("CASE.USER@EXAMPLE.TEST", password),
+                Map.class);
+
+        assertEquals(HttpStatus.CREATED, registration.getStatusCode());
+        assertEquals(HttpStatus.CONFLICT, duplicate.getStatusCode());
+        assertEquals(HttpStatus.OK, login.getStatusCode());
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth((String) login.getBody().get("token"));
+        ResponseEntity<Map> account = restTemplate.exchange(
+                "/api/auth/me", HttpMethod.GET, new HttpEntity<>(headers), Map.class);
+
+        assertEquals(HttpStatus.OK, account.getStatusCode());
+        assertEquals("Case.User@Example.Test", account.getBody().get("email"));
+    }
+
+    @Test
     void registrationRejectsWeakAndCompromisedPasswords() {
         ResponseEntity<Map> shortResponse = restTemplate.postForEntity(
                 "/api/auth/register",
