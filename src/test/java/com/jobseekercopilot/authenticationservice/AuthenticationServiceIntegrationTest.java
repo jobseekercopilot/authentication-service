@@ -12,12 +12,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.ApplicationContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.userdetails.UserDetailsService;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
@@ -45,6 +47,9 @@ class AuthenticationServiceIntegrationTest {
 
     @Autowired
     private TestRestTemplate restTemplate;
+
+    @Autowired
+    private ApplicationContext applicationContext;
 
     @BeforeAll
     void authenticateServiceClient() {
@@ -91,6 +96,31 @@ class AuthenticationServiceIntegrationTest {
 
         assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
         assertFalse(response.getHeaders().containsHeader("Access-Control-Allow-Origin"));
+    }
+
+    @Test
+    void defaultUserAndBrowserAuthenticationEntryPointsAreAbsent() {
+        assertTrue(applicationContext.getBeansOfType(UserDetailsService.class).isEmpty());
+
+        TestRestTemplate unauthenticated = new TestRestTemplate();
+        HttpHeaders basicHeaders = new HttpHeaders();
+        basicHeaders.setBasicAuth("unused", "not-a-credential");
+        ResponseEntity<Map> basic = unauthenticated.exchange(
+                url("/api/auth/me"), HttpMethod.GET, new HttpEntity<>(basicHeaders), Map.class);
+
+        HttpHeaders formHeaders = new HttpHeaders();
+        formHeaders.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        ResponseEntity<Map> form = unauthenticated.exchange(
+                url("/login"), HttpMethod.POST,
+                new HttpEntity<>("username=unused&password=not-a-credential", formHeaders), Map.class);
+
+        assertEquals(HttpStatus.UNAUTHORIZED, basic.getStatusCode());
+        assertEquals("SERVICE_AUTHENTICATION_REQUIRED", basic.getBody().get("code"));
+        assertFalse(basic.getHeaders().containsHeader(HttpHeaders.WWW_AUTHENTICATE));
+        assertEquals(HttpStatus.UNAUTHORIZED, form.getStatusCode());
+        assertEquals("SERVICE_AUTHENTICATION_REQUIRED", form.getBody().get("code"));
+        assertFalse(form.getHeaders().containsHeader(HttpHeaders.LOCATION));
+        assertFalse(form.getHeaders().containsHeader(HttpHeaders.SET_COOKIE));
     }
 
     @Test
