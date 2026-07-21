@@ -90,8 +90,11 @@ own approval.
 
 ## Residual risks
 
-Digest pinning makes inputs reproducible but does not prove publisher identity
-or eliminate a vulnerability discovered later. The CI scanner depends on its
-advisory feed, and local Compose is not a production orchestrator. Registry
-signing/attestation, deployment resource limits, network policy, external secret
-management, monitoring and production rollback remain platform responsibilities.
+Digest pinning fixes the reviewed base filesystem but does not prove publisher
+identity or eliminate a vulnerability discovered later. The image build applies
+current security updates from the base distribution repositories, so the stored
+CI report—not the base digest alone—is the evidence for the resulting package
+set. The CI scanner depends on its advisory feed, and local Compose is not a
+production orchestrator. Registry signing/attestation, deployment resource
+limits, network policy, external secret management, monitoring and production
+rollback remain platform responsibilities.
