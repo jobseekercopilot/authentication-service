@@ -14,6 +14,12 @@ JJWT 0.13.0 and Lombok 1.18.46. Spring Boot 4's supported rest-client modules
 and package names replaced the removed Boot 3 APIs. The remediated scan covers
 107 Java packages with no Critical or High findings. No exception is active.
 
+On 2026-07-22, E2E-03's final-image scan identified `CVE-2026-54291` in
+PostgreSQL JDBC 42.7.11. The service explicitly overrides the BOM to reviewed
+42.7.12, which contains the SCRAM-SHA-256-PLUS downgrade fix. A test asserts the
+resolved runtime JAR version so a future BOM change cannot silently restore the
+affected driver. No TLS, SCRAM or database authentication setting was relaxed.
+
 ## CI scope and failure behavior
 
 The CI `verify` job:
