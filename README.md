@@ -160,11 +160,12 @@ backup/restore, rollback, ownership, legacy local H2 handling, and residual risk
 
 CI scans the resolved runtime dependency set with pinned Trivy, uploads a JSON
 report, and fails closed on missing coverage or any unaccepted Critical/High
-finding. The current supported baseline is Spring Boot 4.1.0 with no accepted
-dependency exceptions. A separate required job rebuilds the JAR with complete
-verification, builds the final image, asserts its runtime metadata, scans OS and
-library packages, and applies the same Critical/High policy. Reproduction,
-ownership and the short-lived exception process are documented in
+finding. The current supported baseline is Spring Boot 4.1.0 with PostgreSQL
+JDBC 42.7.12 and no accepted dependency exceptions. A separate required job
+rebuilds the JAR with complete verification, builds the final image, asserts
+its runtime metadata, scans OS and library packages, and applies the same
+Critical/High policy. Reproduction, ownership and the short-lived exception
+process are documented in
 [the dependency security runbook](docs/DEPENDENCY_SECURITY.md).
 
 ## Branch workflow and troubleshooting
