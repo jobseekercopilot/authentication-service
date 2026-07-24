@@ -23,7 +23,10 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    @Operation(summary = "Get current authenticated user", description = "Returns the user account details for the currently authenticated user based on the JWT token provided in the Authorization header.")
+    @Operation(
+            operationId = "getCurrentUser",
+            summary = "Get current authenticated user",
+            description = "Returns the current user account. Both a trusted service identity and the user's bearer JWT are required.")
     @Tag(name = "Authentication")
     public ResponseEntity<UserAccountResponse> getCurrentUser(
             @RequestHeader(name = "Authorization", required = false) String authHeader) {

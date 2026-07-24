@@ -69,6 +69,12 @@ OpenAPI and Swagger are available only outside production for trusted local
 development and require the service identity header. H2, API docs, Swagger UI
 and detailed health are disabled in the production profile.
 
+The reviewed producer contract is tracked in
+[`contracts/openapi.json`](contracts/openapi.json), with its digest in
+[`contracts/SHA256SUMS`](contracts/SHA256SUMS). Normal tests export the running
+application's OpenAPI document and fail on semantic drift; see
+[`contracts/README.md`](contracts/README.md) for the intentional update process.
+
 Failures use a stable version 1 JSON contract:
 
 ```json
