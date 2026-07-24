@@ -3,6 +3,7 @@ package com.jobseekercopilot.authenticationservice.systemdata;
 import com.jobseekercopilot.authenticationservice.identity.EmailIdentityCanonicalizer;
 import com.jobseekercopilot.authenticationservice.model.User;
 import com.jobseekercopilot.authenticationservice.repository.UserRepository;
+import io.swagger.v3.oas.annotations.Hidden;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -19,6 +20,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/internal/system-data")
+@Hidden
 public class AuthenticationSystemDataController {
     private final EnvironmentDataGuard guard;
     private final UserRepository userRepository;
