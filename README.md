@@ -7,6 +7,10 @@ short-lived access/refresh session issue, rotation, revocation and current-accou
 > security coverage remain blockers. See
 > [the audit](docs/BETA_READINESS_AUDIT.md).
 
+Authentication's token-issuer responsibility and its boundary with Job Search
+resource services are defined in the Infrastructure
+[Job Search architecture ADR](https://github.com/jobseekercopilot/infrastructure/blob/develop/docs/adr/0001-job-search-architecture-and-ownership.md).
+
 ## Requirements and configuration
 
 - Java 17 and Maven 3.9
