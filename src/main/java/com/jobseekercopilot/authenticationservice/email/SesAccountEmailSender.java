@@ -6,31 +6,32 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
-import software.amazon.awssdk.services.sesv2.SesV2Client;
-import software.amazon.awssdk.services.sesv2.model.Body;
-import software.amazon.awssdk.services.sesv2.model.Content;
-import software.amazon.awssdk.services.sesv2.model.Destination;
-import software.amazon.awssdk.services.sesv2.model.EmailContent;
-import software.amazon.awssdk.services.sesv2.model.MessageTag;
-import software.amazon.awssdk.services.sesv2.model.Message;
-import software.amazon.awssdk.services.sesv2.model.SendEmailRequest;
+import software.amazon.awssdk.services.ses.SesClient;
+import software.amazon.awssdk.services.ses.model.Body;
+import software.amazon.awssdk.services.ses.model.Content;
+import software.amazon.awssdk.services.ses.model.Destination;
+import software.amazon.awssdk.services.ses.model.Message;
+import software.amazon.awssdk.services.ses.model.MessageTag;
+import software.amazon.awssdk.services.ses.model.SendEmailRequest;
 
 @Component
-@ConditionalOnProperty(name = "auth.account-email.delivery-mode", havingValue = "ses")
+@ConditionalOnExpression(
+        "'${auth.account-email.delivery-mode:fixture}' == 'ses' || "
+                + "'${auth.account-email.delivery-mode:fixture}' == 'local-ses'")
 public class SesAccountEmailSender implements AccountEmailSender {
 
     private static final DateTimeFormatter EXPIRY_FORMAT =
             DateTimeFormatter.ofPattern("d MMM uuuu 'at' HH:mm 'UTC'").withZone(ZoneOffset.UTC);
 
-    private final SesV2Client ses;
+    private final SesClient ses;
     private final String sender;
     private final String configurationSet;
     private final String supportUrl;
 
     public SesAccountEmailSender(
-            SesV2Client ses,
+            SesClient ses,
             @Value("${auth.account-email.sender}") String sender,
             @Value("${auth.account-email.ses.configuration-set}") String configurationSet,
             @Value("${auth.account-email.support-url}") String supportUrl) {
@@ -92,11 +93,11 @@ public class SesAccountEmailSender implements AccountEmailSender {
                 .body(Body.builder().text(content(text)).html(content(html)).build())
                 .build();
         ses.sendEmail(SendEmailRequest.builder()
-                .fromEmailAddress(sender)
+                .source(sender)
                 .destination(Destination.builder().toAddresses(recipient).build())
-                .content(EmailContent.builder().simple(message).build())
+                .message(message)
                 .configurationSetName(configurationSet)
-                .emailTags(List.of(MessageTag.builder()
+                .tags(List.of(MessageTag.builder()
                         .name("message-purpose")
                         .value(purpose)
                         .build()))

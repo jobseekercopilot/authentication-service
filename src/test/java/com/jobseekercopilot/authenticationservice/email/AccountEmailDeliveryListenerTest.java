@@ -62,12 +62,18 @@ class AccountEmailDeliveryListenerTest {
     }
 
     @Test
-    void rejectsHttpForSesButAllowsBoundedLocalFixtureLinks() {
+    void rejectsRemoteHttpButAllowsBoundedFixtureAndLocalSesLinks() {
         AccountEmailSender sender = mock(AccountEmailSender.class);
         assertThrows(IllegalStateException.class, () ->
                 new AccountEmailDeliveryListener(sender, "http://example.test", "ses"));
+        assertThrows(IllegalStateException.class, () ->
+                new AccountEmailDeliveryListener(sender, "http://example.test", "local-ses"));
         assertDoesNotThrow(() ->
                 new AccountEmailDeliveryListener(sender, "http://localhost:3100", "fixture"));
+        assertDoesNotThrow(() ->
+                new AccountEmailDeliveryListener(sender, "http://localhost:3100", "local-ses"));
+        assertThrows(IllegalStateException.class, () ->
+                new AccountEmailDeliveryListener(sender, "http://localhost:3100/path", "local-ses"));
         AccountEmailDeliveryListener listener = new AccountEmailDeliveryListener(
                 sender, "https://app.jobseekercopilot.com", "ses");
         assertDoesNotThrow(() -> listener.onPasswordChanged(

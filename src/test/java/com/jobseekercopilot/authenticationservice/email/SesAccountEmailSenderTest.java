@@ -9,14 +9,14 @@ import java.net.URI;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import software.amazon.awssdk.services.sesv2.SesV2Client;
-import software.amazon.awssdk.services.sesv2.model.SendEmailRequest;
+import software.amazon.awssdk.services.ses.SesClient;
+import software.amazon.awssdk.services.ses.model.SendEmailRequest;
 
 class SesAccountEmailSenderTest {
 
     @Test
     void resetEmailUsesTheDedicatedSenderConfigurationSetAndPurposeTag() {
-        SesV2Client client = mock(SesV2Client.class);
+        SesClient client = mock(SesClient.class);
         SesAccountEmailSender sender = new SesAccountEmailSender(
                 client,
                 "accounts@jobseekercopilot.com",
@@ -32,18 +32,18 @@ class SesAccountEmailSenderTest {
         ArgumentCaptor<SendEmailRequest> request = ArgumentCaptor.forClass(SendEmailRequest.class);
         verify(client).sendEmail(request.capture());
         SendEmailRequest sent = request.getValue();
-        assertEquals("accounts@jobseekercopilot.com", sent.fromEmailAddress());
+        assertEquals("accounts@jobseekercopilot.com", sent.source());
         assertEquals("JobSeekerCopilotAccountEmails", sent.configurationSetName());
         assertEquals(java.util.List.of("person@example.test"), sent.destination().toAddresses());
-        assertEquals("message-purpose", sent.emailTags().get(0).name());
-        assertEquals("password-reset", sent.emailTags().get(0).value());
-        assertTrue(sent.content().simple().body().text().data().contains(link.toASCIIString()));
-        assertTrue(sent.content().simple().body().html().data().contains(link.toASCIIString()));
+        assertEquals("message-purpose", sent.tags().get(0).name());
+        assertEquals("password-reset", sent.tags().get(0).value());
+        assertTrue(sent.message().body().text().data().contains(link.toASCIIString()));
+        assertTrue(sent.message().body().html().data().contains(link.toASCIIString()));
     }
 
     @Test
     void changedNotificationUsesItsOwnPurposeAndContainsNoResetLink() {
-        SesV2Client client = mock(SesV2Client.class);
+        SesClient client = mock(SesClient.class);
         SesAccountEmailSender sender = new SesAccountEmailSender(
                 client, "accounts@jobseekercopilot.com",
                 "JobSeekerCopilotAccountEmails", "https://jobseekercopilot.com/contact");
@@ -52,8 +52,8 @@ class SesAccountEmailSenderTest {
 
         ArgumentCaptor<SendEmailRequest> request = ArgumentCaptor.forClass(SendEmailRequest.class);
         verify(client).sendEmail(request.capture());
-        assertEquals("password-changed", request.getValue().emailTags().get(0).value());
-        assertTrue(request.getValue().content().simple().body().text().data()
+        assertEquals("password-changed", request.getValue().tags().get(0).value());
+        assertTrue(request.getValue().message().body().text().data()
                 .contains("Every existing session has been signed out."));
     }
 }

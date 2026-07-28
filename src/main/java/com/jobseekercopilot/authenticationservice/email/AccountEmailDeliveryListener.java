@@ -60,10 +60,26 @@ public class AccountEmailDeliveryListener {
         String normalized = value.endsWith("/")
                 ? value.substring(0, value.length() - 1)
                 : value;
-        boolean fixtureHttp = "fixture".equals(deliveryMode) && normalized.startsWith("http://");
-        if (!normalized.startsWith("https://") && !fixtureHttp) {
+        URI uri = URI.create(normalized);
+        boolean localMode = "fixture".equals(deliveryMode)
+                || "local-ses".equals(deliveryMode);
+        boolean boundedLocalHttp = localMode
+                && "http".equals(uri.getScheme())
+                && isLoopbackHost(uri.getHost())
+                && uri.getPort() > 0
+                && (uri.getPath() == null || uri.getPath().isEmpty())
+                && uri.getRawQuery() == null
+                && uri.getRawFragment() == null
+                && uri.getUserInfo() == null;
+        if (!normalized.startsWith("https://") && !boundedLocalHttp) {
             throw new IllegalStateException("Account-email application base URL must use HTTPS");
         }
         return normalized;
+    }
+
+    private static boolean isLoopbackHost(String host) {
+        return "localhost".equals(host)
+                || "127.0.0.1".equals(host)
+                || "::1".equals(host);
     }
 }
