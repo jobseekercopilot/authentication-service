@@ -80,6 +80,72 @@
         }
       }
     },
+    "/api/auth/password-reset/request" : {
+      "post" : {
+        "tags" : [ "Authentication" ],
+        "summary" : "Request a password-reset email",
+        "description" : "Returns the same accepted response whether or not an active account exists.",
+        "operationId" : "requestPasswordReset",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PasswordResetRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "object",
+                  "additionalProperties" : {
+                    "type" : "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/password-reset/complete" : {
+      "post" : {
+        "tags" : [ "Authentication" ],
+        "summary" : "Complete a password reset",
+        "description" : "Atomically consumes a password-reset token, changes the password, and revokes all sessions.",
+        "operationId" : "completePasswordReset",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PasswordResetCompletionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "object",
+                  "additionalProperties" : {
+                    "type" : "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/logout" : {
       "post" : {
         "tags" : [ "Authentication" ],
@@ -232,6 +298,25 @@
           "expiresIn" : {
             "type" : "integer",
             "format" : "int64"
+          }
+        }
+      },
+      "PasswordResetRequest" : {
+        "type" : "object",
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          }
+        }
+      },
+      "PasswordResetCompletionRequest" : {
+        "type" : "object",
+        "properties" : {
+          "token" : {
+            "type" : "string"
+          },
+          "newPassword" : {
+            "type" : "string"
           }
         }
       },

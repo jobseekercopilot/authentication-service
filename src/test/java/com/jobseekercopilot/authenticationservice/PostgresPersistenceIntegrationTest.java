@@ -32,7 +32,7 @@ class PostgresPersistenceIntegrationTest {
 
     @Test
     void migratesAnEmptyPostgresDatabaseAndEnforcesIdentityConstraints() throws SQLException {
-        assertEquals(4, flyway().migrate().migrationsExecuted);
+        assertEquals(5, flyway().migrate().migrationsExecuted);
 
         try (Connection connection = connection(); Statement statement = connection.createStatement()) {
             statement.executeUpdate("""
@@ -71,6 +71,21 @@ class PostgresPersistenceIntegrationTest {
                                     CURRENT_TIMESTAMP + INTERVAL '7 days')
                             """.formatted("a".repeat(64))));
             assertEquals("23505", duplicateToken.getSQLState());
+
+            statement.executeUpdate("""
+                    INSERT INTO password_reset_token
+                        (id, user_id, token_hash, created_at, expires_at)
+                    VALUES ('reset-one', 'first', '%s', CURRENT_TIMESTAMP,
+                            CURRENT_TIMESTAMP + INTERVAL '30 minutes')
+                    """.formatted("c".repeat(64)));
+            SQLException duplicateResetDigest = assertThrows(SQLException.class,
+                    () -> statement.executeUpdate("""
+                            INSERT INTO password_reset_token
+                                (id, user_id, token_hash, created_at, expires_at)
+                            VALUES ('reset-two', 'first', '%s', CURRENT_TIMESTAMP,
+                                    CURRENT_TIMESTAMP + INTERVAL '30 minutes')
+                            """.formatted("c".repeat(64))));
+            assertEquals("23505", duplicateResetDigest.getSQLState());
         }
     }
 
@@ -90,7 +105,7 @@ class PostgresPersistenceIntegrationTest {
                     """);
         }
 
-        assertEquals(3, flyway().migrate().migrationsExecuted);
+        assertEquals(4, flyway().migrate().migrationsExecuted);
         try (Connection connection = connection(); Statement statement = connection.createStatement();
                 var result = statement.executeQuery(
                         "SELECT email, canonical_email FROM users WHERE id = 'retained'")) {
@@ -145,6 +160,12 @@ class PostgresPersistenceIntegrationTest {
                     VALUES ('backup-refresh', 'backup-session', '%s', CURRENT_TIMESTAMP,
                             CURRENT_TIMESTAMP + INTERVAL '7 days')
                     """.formatted("b".repeat(64)));
+            statement.executeUpdate("""
+                    INSERT INTO password_reset_token
+                        (id, user_id, token_hash, created_at, expires_at)
+                    VALUES ('backup-reset', 'backup-user', '%s', CURRENT_TIMESTAMP,
+                            CURRENT_TIMESTAMP + INTERVAL '30 minutes')
+                    """.formatted("d".repeat(64)));
         }
 
         assertSuccessful(POSTGRES.execInContainer(
@@ -160,10 +181,11 @@ class PostgresPersistenceIntegrationTest {
                 "--tuples-only", "--no-align", "--command",
                 "SELECT (SELECT COUNT(*) FROM users) || ',' || "
                         + "(SELECT COUNT(*) FROM authentication_session) || ',' || "
-                        + "(SELECT COUNT(*) FROM refresh_token);");
+                        + "(SELECT COUNT(*) FROM refresh_token) || ',' || "
+                        + "(SELECT COUNT(*) FROM password_reset_token);");
 
         assertSuccessful(count);
-        assertEquals("1,1,1", count.getStdout().trim());
+        assertEquals("1,1,1,1", count.getStdout().trim());
     }
 
     private Flyway flyway() {
