@@ -55,6 +55,11 @@ public class GlobalExceptionHandler {
                 "An account with this email already exists.");
     }
 
+    @ExceptionHandler(PasswordResetException.class)
+    public ResponseEntity<ErrorResponse> handlePasswordReset(PasswordResetException exception) {
+        return response(HttpStatus.BAD_REQUEST, exception.getCode(), exception.getMessage());
+    }
+
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFound() {
         return response(HttpStatus.NOT_FOUND, "NOT_FOUND", "The requested resource was not found.");

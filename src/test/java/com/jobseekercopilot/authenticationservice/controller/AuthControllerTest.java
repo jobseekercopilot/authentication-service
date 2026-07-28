@@ -6,6 +6,7 @@ import com.jobseekercopilot.authenticationservice.model.RegisterRequest;
 import com.jobseekercopilot.authenticationservice.model.RefreshRequest;
 import com.jobseekercopilot.authenticationservice.model.UserAccountResponse;
 import com.jobseekercopilot.authenticationservice.service.AuthService;
+import com.jobseekercopilot.authenticationservice.service.PasswordResetService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -24,6 +25,9 @@ class AuthControllerTest {
 
     @Mock
     private AuthService authService;
+
+    @Mock
+    private PasswordResetService passwordResetService;
 
     @InjectMocks
     private AuthController authController;

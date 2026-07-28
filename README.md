@@ -41,6 +41,14 @@ resource services are defined in the Infrastructure
 | `AUTH_LOGIN_ATTEMPT_WINDOW` | `15m` | Window in which failed logins accumulate |
 | `AUTH_LOGIN_LOCK_DURATION` | `15m` | Automatic recovery delay after the threshold |
 | `AUTH_LOGIN_MAXIMUM_TRACKED_PRINCIPALS` | `10000` | Memory bound for locally tracked principals |
+| `AUTH_PASSWORD_RESET_TOKEN_LIFETIME` | `30m` | Single-use reset-token lifetime |
+| `AUTH_PASSWORD_RESET_REQUEST_COOLDOWN` | `60s` | Per-account reset-email cooldown |
+| `AUTH_ACCOUNT_EMAIL_DELIVERY_MODE` | `fixture` | `fixture` for local/E2E; `ses` for hosted beta |
+| `AUTH_ACCOUNT_EMAIL_APPLICATION_BASE_URL` | `http://localhost:4200` | Reset-link application origin; hosted value is `https://app.jobseekercopilot.com` |
+| `AUTH_ACCOUNT_EMAIL_SENDER` | `accounts@jobseekercopilot.com` | Dedicated account-email sender |
+| `AUTH_ACCOUNT_EMAIL_SUPPORT_URL` | `https://jobseekercopilot.com/contact` | Manual support route |
+| `AUTH_ACCOUNT_EMAIL_SES_REGION` | `eu-west-2` | SES adapter region |
+| `AUTH_ACCOUNT_EMAIL_SES_CONFIGURATION_SET` | `JobSeekerCopilotAccountEmails` | Dedicated account-email configuration set |
 
 There is no fallback signing key. Missing, malformed, mismatched and RSA keys
 below 2048 bits fail startup without echoing key material.
@@ -52,6 +60,8 @@ The local key belongs only in the ignored `.env` file generated below.
 - `POST /api/auth/login`
 - `POST /api/auth/refresh`
 - `POST /api/auth/logout` with bearer token
+- `POST /api/auth/password-reset/request`
+- `POST /api/auth/password-reset/complete`
 - `GET /api/auth/me` with bearer token
 - `GET /.well-known/jwks.json` (public verification keys, cacheable for 5 minutes)
 - `/actuator/health` (unauthenticated health route)
@@ -74,6 +84,20 @@ The reviewed producer contract is tracked in
 [`contracts/SHA256SUMS`](contracts/SHA256SUMS). Normal tests export the running
 application's OpenAPI document and fail on semantic drift; see
 [`contracts/README.md`](contracts/README.md) for the intentional update process.
+
+Password-reset initiation returns the same `202` body for known and unknown
+accounts. Eligible accounts receive a 32-byte opaque token in a URL fragment;
+only its SHA-256 digest is stored. Tokens expire after 30 minutes, are
+single-use, and an eligible newer request invalidates older unused tokens.
+Completion locks the token and account in one transaction, changes the
+password, consumes the token and revokes every active session. Rejected
+passwords roll the transaction back without consuming the link.
+
+Local and automated environments use the guarded in-memory fixture sender and
+never contact SES. The hosted adapter uses the AWS SDK default backend
+credential chain, the dedicated sender/configuration set and a
+`message-purpose` tag. Neither AWS credentials nor reset material enters the
+browser bundle or application logs.
 
 Failures use a stable version 1 JSON contract:
 

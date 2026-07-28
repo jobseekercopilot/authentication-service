@@ -3,6 +3,7 @@ package com.jobseekercopilot.authenticationservice.controller;
 import com.jobseekercopilot.authenticationservice.exception.TokenValidationException;
 import com.jobseekercopilot.authenticationservice.model.*;
 import com.jobseekercopilot.authenticationservice.service.AuthService;
+import com.jobseekercopilot.authenticationservice.service.PasswordResetService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
@@ -17,9 +18,11 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+    private final PasswordResetService passwordResetService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, PasswordResetService passwordResetService) {
         this.authService = authService;
+        this.passwordResetService = passwordResetService;
     }
 
     @GetMapping("/me")
@@ -78,5 +81,31 @@ public class AuthController {
         }
         authService.logout(authHeader.substring(7));
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/password-reset/request")
+    @Operation(
+            operationId = "requestPasswordReset",
+            summary = "Request a password-reset email",
+            description = "Returns the same accepted response whether or not an active account exists.")
+    @Tag(name = "Authentication")
+    public ResponseEntity<Map<String, String>> requestPasswordReset(
+            @RequestBody PasswordResetRequest request) {
+        passwordResetService.requestReset(request);
+        return ResponseEntity.accepted().body(Map.of(
+                "message", "If an account exists for that email, a password-reset link has been sent."));
+    }
+
+    @PostMapping("/password-reset/complete")
+    @Operation(
+            operationId = "completePasswordReset",
+            summary = "Complete a password reset",
+            description = "Atomically consumes a password-reset token, changes the password, and revokes all sessions.")
+    @Tag(name = "Authentication")
+    public ResponseEntity<Map<String, String>> completePasswordReset(
+            @RequestBody PasswordResetCompletionRequest request) {
+        passwordResetService.completeReset(request);
+        return ResponseEntity.ok(Map.of(
+                "message", "Your password has been changed. Sign in with your new password."));
     }
 }

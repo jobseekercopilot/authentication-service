@@ -3,6 +3,7 @@ package com.jobseekercopilot.authenticationservice.service;
 import com.jobseekercopilot.authenticationservice.exception.BadRequestException;
 import com.jobseekercopilot.authenticationservice.identity.EmailIdentityCanonicalizer;
 import com.jobseekercopilot.authenticationservice.model.RegisterRequest;
+import com.jobseekercopilot.authenticationservice.model.User;
 import org.springframework.stereotype.Component;
 
 import java.text.Normalizer;
@@ -57,17 +58,27 @@ public class PasswordPolicy {
             throw new BadRequestException("Enter a valid email address.");
         }
 
+        validatePassword(password, name, emailIdentity.canonical());
+    }
+
+    public void validateNewPassword(User user, String password) {
+        if (user == null || password == null) {
+            throw new BadRequestException("A new password is required.");
+        }
+        validatePassword(password, user.getName().trim(), user.getCanonicalEmail());
+    }
+
+    private void validatePassword(String password, String name, String canonicalEmail) {
         int codePoints = password.codePointCount(0, password.length());
         if (codePoints < MINIMUM_CODE_POINTS || codePoints > MAXIMUM_CODE_POINTS) {
             throw new BadRequestException("Password must contain between 15 and 128 characters.");
         }
-
         String comparison = Normalizer.normalize(password, Normalizer.Form.NFKC)
                 .toLowerCase(Locale.ROOT);
-        String emailLocalPart = emailIdentity.canonical().substring(0, emailIdentity.canonical().indexOf('@'));
+        String emailLocalPart = canonicalEmail.substring(0, canonicalEmail.indexOf('@'));
         if (BLOCKED_PASSWORDS.contains(comparison)
                 || comparison.equals(name.toLowerCase(Locale.ROOT))
-                || comparison.equals(emailIdentity.canonical())
+                || comparison.equals(canonicalEmail)
                 || comparison.equals(emailLocalPart)) {
             throw new BadRequestException("Choose a password that is not commonly used or based on account details.");
         }
