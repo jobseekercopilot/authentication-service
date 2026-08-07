@@ -17,6 +17,7 @@ import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.Date;
 import java.util.LinkedHashMap;
@@ -34,6 +35,7 @@ public class JwtTokenProvider {
     static final long MAXIMUM_ACCESS_TOKEN_LIFETIME_MS = 3_600_000;
     private static final String ALGORITHM = "RS256";
     private static final String ACCESS_TOKEN_TYPE = "access";
+    private static final String ACCOUNT_LIFECYCLE_TOKEN_TYPE = "account_lifecycle";
     private static final String SESSION_ID_CLAIM = "sid";
     private static final String TOKEN_TYPE_CLAIM = "token_type";
 
@@ -45,6 +47,7 @@ public class JwtTokenProvider {
     private final String audience;
     private final String keyId;
     private final long clockSkewSeconds;
+    private final Duration accountLifecycleTokenLifetime;
     private final Clock clock;
 
     @Autowired
@@ -57,16 +60,40 @@ public class JwtTokenProvider {
             @Value("${jwt.audience:job-seeker-copilot-services}") String audience,
             @Value("${jwt.key-id:primary}") String keyId,
             @Value("${jwt.clock-skew-seconds:30}") long clockSkewSeconds,
+            @Value("${auth.account-lifecycle.token-lifetime:5m}")
+            Duration accountLifecycleTokenLifetime,
             Clock clock) {
         this(parsePrivateKey(privateKeyBase64), parsePublicKey(publicKeyBase64),
                 parsePreviousKeys(previousPublicKeys), expirationMs, issuer, audience, keyId,
-                clockSkewSeconds, clock);
+                clockSkewSeconds, accountLifecycleTokenLifetime, clock);
+    }
+
+    public JwtTokenProvider(
+            String privateKeyBase64,
+            String publicKeyBase64,
+            String previousPublicKeys,
+            long expirationMs,
+            String issuer,
+            String audience,
+            String keyId,
+            long clockSkewSeconds,
+            Clock clock) {
+        this(privateKeyBase64, publicKeyBase64, previousPublicKeys, expirationMs,
+                issuer, audience, keyId, clockSkewSeconds, Duration.ofMinutes(5), clock);
     }
 
     JwtTokenProvider(
             PrivateKey privateKey, PublicKey publicKey, Map<String, PublicKey> previousPublicKeys,
             long expirationMs, String issuer, String audience, String keyId,
             long clockSkewSeconds, Clock clock) {
+        this(privateKey, publicKey, previousPublicKeys, expirationMs, issuer, audience,
+                keyId, clockSkewSeconds, Duration.ofMinutes(5), clock);
+    }
+
+    JwtTokenProvider(
+            PrivateKey privateKey, PublicKey publicKey, Map<String, PublicKey> previousPublicKeys,
+            long expirationMs, String issuer, String audience, String keyId,
+            long clockSkewSeconds, Duration accountLifecycleTokenLifetime, Clock clock) {
         validateConfiguration(privateKey, publicKey, previousPublicKeys, expirationMs,
                 issuer, audience, keyId, clockSkewSeconds);
         this.privateKey = privateKey;
@@ -75,6 +102,14 @@ public class JwtTokenProvider {
         this.audience = audience;
         this.keyId = keyId;
         this.clockSkewSeconds = clockSkewSeconds;
+        if (accountLifecycleTokenLifetime == null
+                || accountLifecycleTokenLifetime.isZero()
+                || accountLifecycleTokenLifetime.isNegative()
+                || accountLifecycleTokenLifetime.compareTo(Duration.ofMinutes(15)) > 0) {
+            throw new IllegalStateException(
+                    "Account-lifecycle token lifetime must be between 1ms and 15 minutes");
+        }
+        this.accountLifecycleTokenLifetime = accountLifecycleTokenLifetime;
         this.clock = clock;
 
         Map<String, PublicKey> keys = new LinkedHashMap<>();
@@ -98,6 +133,22 @@ public class JwtTokenProvider {
                 .claim(TOKEN_TYPE_CLAIM, ACCESS_TOKEN_TYPE)
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + expirationMs))
+                .signWith(privateKey, Jwts.SIG.RS256)
+                .compact();
+    }
+
+    public String generateAccountLifecycleToken(String userId, String operationId) {
+        Date now = Date.from(clock.instant());
+        return Jwts.builder()
+                .header().keyId(keyId).and()
+                .issuer(issuer)
+                .audience().add(audience).and()
+                .subject(userId)
+                .id(UUID.randomUUID().toString())
+                .claim("operation_id", operationId)
+                .claim(TOKEN_TYPE_CLAIM, ACCOUNT_LIFECYCLE_TOKEN_TYPE)
+                .issuedAt(now)
+                .expiration(Date.from(clock.instant().plus(accountLifecycleTokenLifetime)))
                 .signWith(privateKey, Jwts.SIG.RS256)
                 .compact();
     }

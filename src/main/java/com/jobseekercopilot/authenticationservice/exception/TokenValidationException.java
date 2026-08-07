@@ -32,4 +32,10 @@ public class TokenValidationException extends RuntimeException {
     public static TokenValidationException invalid() {
         return new TokenValidationException("TOKEN_INVALID", "The authentication token is invalid.");
     }
+
+    public static TokenValidationException recentAuthenticationRequired() {
+        return new TokenValidationException(
+                "RECENT_AUTHENTICATION_REQUIRED",
+                "Sign in again before exporting or deleting account data.");
+    }
 }

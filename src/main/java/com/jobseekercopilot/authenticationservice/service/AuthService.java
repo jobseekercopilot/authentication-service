@@ -20,6 +20,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.UUID;
 
 @Service
@@ -158,6 +159,31 @@ public class AuthService {
             AccessTokenClaims claims = jwtTokenProvider.parseAccessToken(token);
             sessionTokenService.validate(claims);
             log.info("JWT validation succeeded userId={} durationMs={}",
+                    claims.userId(),
+                    (System.nanoTime() - startedAt) / 1_000_000);
+            return claims.userId();
+        } catch (ExpiredJwtException exception) {
+            return rejectToken(startedAt, exception, TokenValidationException.expired());
+        } catch (MalformedJwtException exception) {
+            return rejectToken(startedAt, exception, TokenValidationException.malformed());
+        } catch (UnsupportedJwtException exception) {
+            return rejectToken(startedAt, exception, TokenValidationException.unsupported());
+        } catch (SecurityException exception) {
+            return rejectToken(startedAt, exception, TokenValidationException.invalid());
+        } catch (JwtException | IllegalArgumentException exception) {
+            return rejectToken(startedAt, exception, TokenValidationException.invalid());
+        }
+    }
+
+    public String validateRecentlyAuthenticated(String token, Duration maximumAge) {
+        long startedAt = System.nanoTime();
+        if (token == null || token.trim().isEmpty()) {
+            throw TokenValidationException.required();
+        }
+        try {
+            AccessTokenClaims claims = jwtTokenProvider.parseAccessToken(token);
+            sessionTokenService.validateRecent(claims, maximumAge);
+            log.info("Recent authentication validated userId={} durationMs={}",
                     claims.userId(),
                     (System.nanoTime() - startedAt) / 1_000_000);
             return claims.userId();

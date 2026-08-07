@@ -9,6 +9,8 @@ import org.springframework.data.repository.query.Param;
 
 public interface AuthenticationSessionRepository extends JpaRepository<AuthenticationSession, String> {
 
+    void deleteByUserId(String userId);
+
     @Modifying
     @Query("""
             update AuthenticationSession session

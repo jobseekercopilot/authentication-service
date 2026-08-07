@@ -12,6 +12,8 @@ import org.springframework.data.repository.query.Param;
 
 public interface PasswordResetTokenRepository extends JpaRepository<PasswordResetToken, String> {
 
+    void deleteByUserId(String userId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select token from PasswordResetToken token where token.tokenHash = :tokenHash")
     Optional<PasswordResetToken> findByTokenHashForUpdate(@Param("tokenHash") String tokenHash);

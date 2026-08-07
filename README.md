@@ -3,8 +3,8 @@
 Spring Boot service for account registration, adaptive password verification,
 short-lived access/refresh session issue, rotation, revocation and current-account lookup.
 
-> Beta status: not beta-ready. Account lifecycle and broader cross-service
-> security coverage remain blockers. See
+> Beta status: not beta-ready. Production account-lifecycle deployment evidence
+> and broader cross-service security coverage remain blockers. See
 > [the audit](docs/BETA_READINESS_AUDIT.md).
 
 Authentication's token-issuer responsibility and its boundary with Job Search
@@ -60,6 +60,8 @@ The local key belongs only in the ignored `.env` file generated below.
 - `POST /api/auth/login`
 - `POST /api/auth/refresh`
 - `POST /api/auth/logout` with bearer token
+- `GET /api/auth/account/export` with a recently created bearer session
+- `DELETE /api/auth/account` with a recently created bearer session and `Idempotency-Key`
 - `POST /api/auth/password-reset/request`
 - `POST /api/auth/password-reset/complete`
 - `GET /api/auth/me` with bearer token
@@ -84,6 +86,12 @@ The reviewed producer contract is tracked in
 [`contracts/SHA256SUMS`](contracts/SHA256SUMS). Normal tests export the running
 application's OpenAPI document and fail on semantic drift; see
 [`contracts/README.md`](contracts/README.md) for the intentional update process.
+
+Authenticated account export and coordinated retry-safe deletion are described
+in [`docs/ACCOUNT_LIFECYCLE.md`](docs/ACCOUNT_LIFECYCLE.md). They require a
+session created within the last 15 minutes. Deletion immediately revokes login,
+then resumes any incomplete downstream steps from a content-free journal;
+production irreversible document purge remains separately disabled.
 
 Password-reset initiation returns the same `202` body for known and unknown
 accounts. Eligible accounts receive a 32-byte opaque token in a URL fragment;

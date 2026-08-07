@@ -20,7 +20,7 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("Jobseeker Copilot - Authentication Service API")
                         .description("Authentication and user management microservice providing JWT-based stateless authentication, user registration, and token validation.")
-                        .version("1.0.0"))
+                        .version("1.1.0"))
                 .components(new Components()
                         .addSecuritySchemes("bearerAuth", new SecurityScheme()
                                 .type(SecurityScheme.Type.HTTP)
@@ -37,12 +37,17 @@ public class OpenApiConfig {
     }
 
     @Bean
-    public OpenApiCustomizer currentUserSecurityCustomizer() {
+    public OpenApiCustomizer authenticatedAccountSecurityCustomizer() {
         return openApi -> {
-            var operation = openApi.getPaths().get("/api/auth/me").getGet();
-            operation.setSecurity(List.of(new SecurityRequirement()
+            var requirement = new SecurityRequirement()
                     .addList("bearerAuth")
-                    .addList("serviceToken")));
+                    .addList("serviceToken");
+            openApi.getPaths().get("/api/auth/me").getGet()
+                    .setSecurity(List.of(requirement));
+            openApi.getPaths().get("/api/auth/account/export").getGet()
+                    .setSecurity(List.of(requirement));
+            openApi.getPaths().get("/api/auth/account").getDelete()
+                    .setSecurity(List.of(requirement));
         };
     }
 }

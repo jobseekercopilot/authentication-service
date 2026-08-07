@@ -32,7 +32,7 @@ class PostgresPersistenceIntegrationTest {
 
     @Test
     void migratesAnEmptyPostgresDatabaseAndEnforcesIdentityConstraints() throws SQLException {
-        assertEquals(5, flyway().migrate().migrationsExecuted);
+        assertEquals(6, flyway().migrate().migrationsExecuted);
 
         try (Connection connection = connection(); Statement statement = connection.createStatement()) {
             statement.executeUpdate("""
@@ -105,7 +105,7 @@ class PostgresPersistenceIntegrationTest {
                     """);
         }
 
-        assertEquals(4, flyway().migrate().migrationsExecuted);
+        assertEquals(5, flyway().migrate().migrationsExecuted);
         try (Connection connection = connection(); Statement statement = connection.createStatement();
                 var result = statement.executeQuery(
                         "SELECT email, canonical_email FROM users WHERE id = 'retained'")) {

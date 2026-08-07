@@ -3,10 +3,16 @@ package com.jobseekercopilot.authenticationservice.controller;
 import com.jobseekercopilot.authenticationservice.exception.TokenValidationException;
 import com.jobseekercopilot.authenticationservice.model.*;
 import com.jobseekercopilot.authenticationservice.service.AuthService;
+import com.jobseekercopilot.authenticationservice.service.AccountLifecycleService;
 import com.jobseekercopilot.authenticationservice.service.PasswordResetService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,10 +25,15 @@ public class AuthController {
 
     private final AuthService authService;
     private final PasswordResetService passwordResetService;
+    private final AccountLifecycleService accountLifecycleService;
 
-    public AuthController(AuthService authService, PasswordResetService passwordResetService) {
+    public AuthController(
+            AuthService authService,
+            PasswordResetService passwordResetService,
+            AccountLifecycleService accountLifecycleService) {
         this.authService = authService;
         this.passwordResetService = passwordResetService;
+        this.accountLifecycleService = accountLifecycleService;
     }
 
     @GetMapping("/me")
@@ -107,5 +118,53 @@ public class AuthController {
         passwordResetService.completeReset(request);
         return ResponseEntity.ok(Map.of(
                 "message", "Your password has been changed. Sign in with your new password."));
+    }
+
+    @GetMapping(value = "/account/export", produces = "application/json")
+    @Operation(
+            operationId = "exportPersonalData",
+            summary = "Export personal account data",
+            description = "Requires a session created by sign-in within the last 15 minutes. The synchronous JSON response is not retained by the service.")
+    @ApiResponse(responseCode = "200", description = "Complete no-store personal-data export")
+    @Tag(name = "Account lifecycle")
+    public ResponseEntity<PersonalDataExport> exportPersonalData(
+            @RequestHeader(name = "Authorization") String authHeader) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"job-seeker-copilot-personal-data.json\"")
+                .body(accountLifecycleService.export(bearer(authHeader)));
+    }
+
+    @DeleteMapping("/account")
+    @Operation(
+            operationId = "deleteAccount",
+            summary = "Delete the current account and owned data",
+            description = "Disables credentials first and starts an idempotent, retryable cross-service deletion operation. Document content follows DOC-09 recoverable deletion and legal-hold rules.")
+    @ApiResponse(responseCode = "202", description = "Deletion accepted or safely resumed")
+    @Tag(name = "Account lifecycle")
+    public ResponseEntity<AccountDeletionResponse> deleteAccount(
+            @RequestHeader(name = "Authorization") String authHeader,
+            @Parameter(
+                    required = true,
+                    schema = @Schema(
+                            minLength = 16,
+                            maxLength = 128,
+                            pattern = "[A-Za-z0-9][A-Za-z0-9._:-]{15,127}"))
+            @RequestHeader(name = "Idempotency-Key")
+            String idempotencyKey) {
+        return ResponseEntity.accepted()
+                .cacheControl(CacheControl.noStore())
+                .body(accountLifecycleService.delete(
+                        bearer(authHeader), idempotencyKey));
+    }
+
+    private String bearer(String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")
+                || authHeader.length() == 7) {
+            throw TokenValidationException.required();
+        }
+        return authHeader.substring(7);
     }
 }
