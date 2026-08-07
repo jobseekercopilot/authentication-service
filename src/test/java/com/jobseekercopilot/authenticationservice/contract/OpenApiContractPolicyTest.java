@@ -109,6 +109,42 @@ class OpenApiContractPolicyTest {
             failures.add("bearerAuth and serviceToken must be required together");
         }
 
+        JsonNode exportOperation = contract.at(
+                "/paths/~1api~1auth~1account~1export/get");
+        JsonNode deletionOperation = contract.at(
+                "/paths/~1api~1auth~1account/delete");
+        if (!"exportPersonalData".equals(
+                exportOperation.path("operationId").asText())) {
+            failures.add("exportPersonalData operation is missing");
+        }
+        if (!"deleteAccount".equals(
+                deletionOperation.path("operationId").asText())) {
+            failures.add("deleteAccount operation is missing");
+        }
+        for (JsonNode lifecycleOperation : List.of(
+                exportOperation, deletionOperation)) {
+            JsonNode lifecycleSecurity = lifecycleOperation.path("security");
+            boolean lifecycleRequiresBoth = lifecycleSecurity.isArray()
+                    && lifecycleSecurity.size() == 1
+                    && Set.copyOf(iterableFieldNames(lifecycleSecurity.get(0)))
+                            .equals(Set.of("bearerAuth", "serviceToken"));
+            if (!lifecycleRequiresBoth) {
+                failures.add("account lifecycle must require bearerAuth and serviceToken");
+            }
+        }
+        boolean requiredIdempotencyKey = false;
+        for (JsonNode parameter : deletionOperation.path("parameters")) {
+            if ("Idempotency-Key".equals(parameter.path("name").asText())
+                    && parameter.path("required").asBoolean()
+                    && parameter.at("/schema/minLength").asInt() == 16
+                    && parameter.at("/schema/maxLength").asInt() == 128) {
+                requiredIdempotencyKey = true;
+            }
+        }
+        if (!requiredIdempotencyKey) {
+            failures.add("deleteAccount requires a bounded Idempotency-Key");
+        }
+
         JsonNode bearer = contract.at("/components/securitySchemes/bearerAuth");
         if (!"http".equals(bearer.path("type").asText())
                 || !"bearer".equals(bearer.path("scheme").asText())) {

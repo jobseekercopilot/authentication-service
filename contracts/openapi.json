@@ -3,7 +3,7 @@
   "info" : {
     "title" : "Jobseeker Copilot - Authentication Service API",
     "description" : "Authentication and user management microservice providing JWT-based stateless authentication, user registration, and token validation.",
-    "version" : "1.0.0"
+    "version" : "1.1.0"
   },
   "servers" : [ {
     "url" : "http://localhost",
@@ -229,6 +229,38 @@
         } ]
       }
     },
+    "/api/auth/account/export" : {
+      "get" : {
+        "tags" : [ "Account lifecycle" ],
+        "summary" : "Export personal account data",
+        "description" : "Requires a session created by sign-in within the last 15 minutes. The synchronous JSON response is not retained by the service.",
+        "operationId" : "exportPersonalData",
+        "parameters" : [ {
+          "name" : "Authorization",
+          "in" : "header",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Complete no-store personal-data export",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PersonalDataExport"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ],
+          "serviceToken" : [ ]
+        } ]
+      }
+    },
     "/.well-known/jwks.json" : {
       "get" : {
         "tags" : [ "Token verification" ],
@@ -256,6 +288,48 @@
             }
           }
         }
+      }
+    },
+    "/api/auth/account" : {
+      "delete" : {
+        "tags" : [ "Account lifecycle" ],
+        "summary" : "Delete the current account and owned data",
+        "description" : "Disables credentials first and starts an idempotent, retryable cross-service deletion operation. Document content follows DOC-09 recoverable deletion and legal-hold rules.",
+        "operationId" : "deleteAccount",
+        "parameters" : [ {
+          "name" : "Authorization",
+          "in" : "header",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "Idempotency-Key",
+          "in" : "header",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 128,
+            "minLength" : 16,
+            "pattern" : "[A-Za-z0-9][A-Za-z0-9._:-]{15,127}"
+          }
+        } ],
+        "responses" : {
+          "202" : {
+            "description" : "Deletion accepted or safely resumed",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AccountDeletionResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ],
+          "serviceToken" : [ ]
+        } ]
       }
     }
   },
@@ -342,6 +416,51 @@
           },
           "email" : {
             "type" : "string"
+          }
+        }
+      },
+      "JsonNode" : { },
+      "PersonalDataExport" : {
+        "type" : "object",
+        "properties" : {
+          "schemaVersion" : {
+            "type" : "string"
+          },
+          "generatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "account" : {
+            "$ref" : "#/components/schemas/UserAccountResponse"
+          },
+          "profile" : {
+            "$ref" : "#/components/schemas/JsonNode"
+          },
+          "applications" : {
+            "$ref" : "#/components/schemas/JsonNode"
+          },
+          "documents" : {
+            "$ref" : "#/components/schemas/JsonNode"
+          }
+        }
+      },
+      "AccountDeletionResponse" : {
+        "type" : "object",
+        "properties" : {
+          "operationId" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "PENDING", "RETRY_REQUIRED", "COMPLETED" ]
+          },
+          "acceptedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "completedAt" : {
+            "type" : "string",
+            "format" : "date-time"
           }
         }
       }

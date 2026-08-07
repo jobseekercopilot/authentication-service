@@ -95,6 +95,17 @@ public class SessionTokenService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public void validateRecent(AccessTokenClaims claims, Duration maximumAge) {
+        validate(claims);
+        AuthenticationSession session = sessionRepository.findById(claims.sessionId())
+                .orElseThrow(TokenValidationException::invalid);
+        if (maximumAge == null || maximumAge.isZero() || maximumAge.isNegative()
+                || session.getCreatedAt().isBefore(clock.instant().minus(maximumAge))) {
+            throw TokenValidationException.recentAuthenticationRequired();
+        }
+    }
+
     @Transactional
     public void revoke(AccessTokenClaims claims) {
         sessionRepository.findById(claims.sessionId()).ifPresent(session -> {

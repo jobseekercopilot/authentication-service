@@ -42,6 +42,26 @@ class JwtTokenProviderTest {
     }
 
     @Test
+    void accountLifecycleTokenIsShortLivedAndBoundToOneOperation() {
+        JwtTokenProvider provider = provider(TestJwtKeys.ACTIVE, Map.of(), "active");
+
+        String token = provider.generateAccountLifecycleToken("user123", "operation123");
+        var parsed = Jwts.parser()
+                .verifyWith(TestJwtKeys.ACTIVE.getPublic())
+                .clock(() -> Date.from(CLOCK.instant()))
+                .build()
+                .parseSignedClaims(token);
+
+        assertEquals("user123", parsed.getPayload().getSubject());
+        assertEquals("account_lifecycle", parsed.getPayload().get("token_type"));
+        assertEquals("operation123", parsed.getPayload().get("operation_id"));
+        assertEquals(
+                CLOCK.instant().plusSeconds(300),
+                parsed.getPayload().getExpiration().toInstant());
+        assertThrows(JwtException.class, () -> provider.parseAccessToken(token));
+    }
+
+    @Test
     void previousPublicKeyRemainsValidDuringRotationAndIsPublished() {
         JwtTokenProvider oldProvider = provider(TestJwtKeys.PREVIOUS, Map.of(), "previous");
         JwtTokenProvider currentProvider = provider(

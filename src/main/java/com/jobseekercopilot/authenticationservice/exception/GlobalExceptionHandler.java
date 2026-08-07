@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import com.jobseekercopilot.authenticationservice.service.AccountLifecycleDownstreamException;
 
 @ControllerAdvice
 public class GlobalExceptionHandler {
@@ -63,6 +64,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFound() {
         return response(HttpStatus.NOT_FOUND, "NOT_FOUND", "The requested resource was not found.");
+    }
+
+    @ExceptionHandler(AccountLifecycleDownstreamException.class)
+    public ResponseEntity<ErrorResponse> handleAccountLifecycleDependency() {
+        return response(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "ACCOUNT_LIFECYCLE_DEPENDENCY_UNAVAILABLE",
+                "Account data could not be exported at this time. Try again later.");
     }
 
     @ExceptionHandler(Exception.class)
