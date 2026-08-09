@@ -1,5 +1,13 @@
 # Authentication Service
 
+## Role in Job Seeker Copilot
+
+| Role | Called by | Calls | Data | Local port |
+|---|---|---|---|---:|
+| Account, credential, session and JWT issuer service | User Management Gateway; resource services read JWKS | User Profile, Application Tracker and Document Store for account lifecycle | Own PostgreSQL database | 8084 |
+
+See the central [account journey](https://docs.jobseekercopilot.com/journeys/account-authentication/), [data ownership](https://docs.jobseekercopilot.com/data/ownership/), and [service catalogue](https://docs.jobseekercopilot.com/services/catalogue/).
+
 Spring Boot service for account registration, adaptive password verification,
 short-lived access/refresh session issue, rotation, revocation and current-account lookup.
 
