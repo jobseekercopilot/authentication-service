@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
@@ -70,6 +71,24 @@ public class AuthenticationSystemDataController {
                 existed ? 1 : 0,
                 guard.activeEnvironment(),
                 Map.of("scenarioId", scenarioId, "userId", userId)));
+    }
+
+    @GetMapping("/resolve/users")
+    public ResponseEntity<SystemDataResult> resolveSyntheticUser(@RequestParam String email) {
+        guard.requireEnabled();
+        var identity = emailCanonicalizer.normalize(email);
+        if (!identity.canonical().endsWith("@example.com")) {
+            throw new IllegalArgumentException("System-data identity must use the reserved example.com domain");
+        }
+        var user = userRepository.findByCanonicalEmail(identity.canonical());
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("exists", user.isPresent());
+        user.ifPresent(value -> details.put("userId", value.getId()));
+        return ResponseEntity.ok(SystemDataResult.success(
+                "RESOLVE",
+                user.isPresent() ? 1 : 0,
+                guard.activeEnvironment(),
+                details));
     }
 
     @GetMapping("/verify/users/{userId}")
