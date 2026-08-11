@@ -11,8 +11,9 @@ See the central [account journey](https://docs.jobseekercopilot.com/journeys/acc
 Spring Boot service for account registration, adaptive password verification,
 short-lived access/refresh session issue, rotation, revocation and current-account lookup.
 
-> Beta status: not beta-ready. Production account-lifecycle deployment evidence
-> and broader cross-service security coverage remain blockers. See
+> Delivery status: implemented, composed and exercised for the controlled
+> private-beta account/session journey. Production account-lifecycle deployment
+> evidence and broader security assurance remain outstanding. See
 > [the audit](docs/BETA_READINESS_AUDIT.md).
 
 Authentication's token-issuer responsibility and its boundary with Job Search
