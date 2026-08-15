@@ -46,6 +46,10 @@ resource services are defined in the Infrastructure
 | `JWT_KEY_ID` | `primary` | Signing-key identifier placed in `kid` |
 | `JWT_CLOCK_SKEW_SECONDS` | `30` | Accepted clock skew; maximum 300 seconds |
 | `AUTH_REFRESH_TOKEN_LIFETIME` | `7d` | Absolute server-side session and refresh lifetime |
+| `AUTH_LEGAL_DOCUMENTS_REVIEWED` | `false` | Production startup gate; set to `true` only after the configured registration documents are approved |
+| `AUTH_LEGAL_CURRENT_VERSION` | `2026-08-15` | Registration legal-document version; production rejects draft/test/placeholder values |
+| `AUTH_LEGAL_TERMS_URL` | `https://jobseekercopilot.com/terms` | Credential-free HTTPS Terms URL shown before registration |
+| `AUTH_LEGAL_PRIVACY_NOTICE_URL` | `https://jobseekercopilot.com/privacy` | Credential-free HTTPS Privacy Notice URL shown before registration |
 | `AUTH_LOGIN_MAXIMUM_FAILURES` | `10` | Failed logins allowed per normalized principal and attempt window |
 | `AUTH_LOGIN_ATTEMPT_WINDOW` | `15m` | Window in which failed logins accumulate |
 | `AUTH_LOGIN_LOCK_DURATION` | `15m` | Automatic recovery delay after the threshold |
@@ -89,6 +93,14 @@ cookie authentication.
 OpenAPI and Swagger are available only outside production for trusted local
 development and require the service identity header. H2, API docs, Swagger UI
 and detailed health are disabled in the production profile.
+
+The production profile also refuses to start until
+`AUTH_LEGAL_DOCUMENTS_REVIEWED=true`. The configured legal version must be a
+non-placeholder release value, and both registration document URLs must be
+reviewed, credential-free HTTPS URLs on non-placeholder hosts. The checked-in
+version and URLs support local development only; they are not production
+approval. The production-style Compose journey therefore needs the review flag
+set explicitly after its operator has confirmed the values being exercised.
 
 The reviewed producer contract is tracked in
 [`contracts/openapi.json`](contracts/openapi.json), with its digest in
