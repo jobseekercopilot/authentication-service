@@ -99,7 +99,12 @@ application's OpenAPI document and fail on semantic drift; see
 Authenticated account export and coordinated retry-safe deletion are described
 in [`docs/ACCOUNT_LIFECYCLE.md`](docs/ACCOUNT_LIFECYCLE.md). They require a
 session created within the last 15 minutes. Deletion immediately revokes login,
-then resumes any incomplete downstream steps from a content-free journal;
+then resumes any incomplete downstream steps from a content-free journal. The
+Payment Service boundary uses the dedicated
+`ACCOUNT_LIFECYCLE_TO_PAYMENT_SERVICE_TOKEN`; it retains statutory financial
+records while revoking wallet and Checkout access, and Authentication never
+calls Stripe directly. Production startup fails closed when this credential is
+missing or malformed. The
 production irreversible document purge remains separately disabled.
 
 Password-reset initiation returns the same `202` body for known and unknown

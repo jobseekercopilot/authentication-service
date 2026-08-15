@@ -64,6 +64,8 @@ public class AccountDeletionTransaction {
                 AccountDeletionStatus.PENDING,
                 null,
                 null,
+                true,
+                null,
                 null,
                 0,
                 null,
@@ -98,7 +100,9 @@ public class AccountDeletionTransaction {
         AccountDeletionOperation operation = operationRepository.findByIdForUpdate(operationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Deletion operation not found"));
         var now = clock.instant();
-        if (step == Step.DOCUMENT_STORE && operation.getDocumentStoreCompletedAt() == null) {
+        if (step == Step.PAYMENT_SERVICE && operation.getPaymentServiceCompletedAt() == null) {
+            operation.setPaymentServiceCompletedAt(now);
+        } else if (step == Step.DOCUMENT_STORE && operation.getDocumentStoreCompletedAt() == null) {
             operation.setDocumentStoreCompletedAt(now);
         } else if (step == Step.APPLICATION_TRACKER
                 && operation.getApplicationTrackerCompletedAt() == null) {
@@ -134,7 +138,9 @@ public class AccountDeletionTransaction {
         if (operation.getStatus() == AccountDeletionStatus.COMPLETED) {
             return operation;
         }
-        if (operation.getDocumentStoreCompletedAt() == null
+        if ((operation.isPaymentServiceRequired()
+                        && operation.getPaymentServiceCompletedAt() == null)
+                || operation.getDocumentStoreCompletedAt() == null
                 || operation.getApplicationTrackerCompletedAt() == null
                 || operation.getUserProfileCompletedAt() == null) {
             throw new IllegalStateException("Deletion cannot complete before every service step");
@@ -178,6 +184,7 @@ public class AccountDeletionTransaction {
     }
 
     public enum Step {
+        PAYMENT_SERVICE,
         DOCUMENT_STORE,
         APPLICATION_TRACKER,
         USER_PROFILE

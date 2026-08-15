@@ -109,8 +109,8 @@ class OpenApiContractPolicyTest {
             failures.add("getCurrentUser operation is missing");
         }
 
-        if (!"2.0.0".equals(contract.at("/info/version").asText())) {
-            failures.add("authentication contract must declare version 2.0.0");
+        if (!"2.1.0".equals(contract.at("/info/version").asText())) {
+            failures.add("authentication contract must declare version 2.1.0");
         }
 
         JsonNode registrationOperation = contract.at(
@@ -192,6 +192,11 @@ class OpenApiContractPolicyTest {
         }
         if (!requiredIdempotencyKey) {
             failures.add("deleteAccount requires a bounded Idempotency-Key");
+        }
+        JsonNode exportProperties = contract.at(
+                "/components/schemas/PersonalDataExport/properties");
+        if (!exportProperties.has("payments")) {
+            failures.add("personal-data export must include retained payment records");
         }
 
         JsonNode bearer = contract.at("/components/securitySchemes/bearerAuth");

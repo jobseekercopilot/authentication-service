@@ -38,6 +38,12 @@ public class AccountDeletionOperation {
     @Column(name = "document_store_completed_at")
     private Instant documentStoreCompletedAt;
 
+    @Column(name = "payment_service_completed_at")
+    private Instant paymentServiceCompletedAt;
+
+    @Column(name = "payment_service_required", nullable = false)
+    private boolean paymentServiceRequired = true;
+
     @Column(name = "application_tracker_completed_at")
     private Instant applicationTrackerCompletedAt;
 

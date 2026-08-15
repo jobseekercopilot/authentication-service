@@ -1,7 +1,7 @@
 package com.jobseekercopilot.authenticationservice.model;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
+import tools.jackson.databind.JsonNode;
 
 public record PersonalDataExport(
         String schemaVersion,
@@ -10,5 +10,6 @@ public record PersonalDataExport(
         RegistrationLegalAcceptanceResponse registrationLegalAcceptance,
         JsonNode profile,
         JsonNode applications,
-        JsonNode documents) {
+        JsonNode documents,
+        JsonNode payments) {
 }

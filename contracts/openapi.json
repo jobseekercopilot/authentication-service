@@ -3,7 +3,7 @@
   "info" : {
     "title" : "Jobseeker Copilot - Authentication Service API",
     "description" : "Authentication and user management microservice providing JWT-based stateless authentication, user registration, and token validation.",
-    "version" : "2.0.0"
+    "version" : "2.1.0"
   },
   "servers" : [ {
     "url" : "http://localhost",
@@ -477,7 +477,85 @@
           }
         }
       },
-      "JsonNode" : { },
+      "JsonNode" : {
+        "type" : "object",
+        "properties" : {
+          "array" : {
+            "type" : "boolean"
+          },
+          "empty" : {
+            "type" : "boolean"
+          },
+          "null" : {
+            "type" : "boolean"
+          },
+          "float" : {
+            "type" : "boolean"
+          },
+          "string" : {
+            "type" : "boolean"
+          },
+          "container" : {
+            "type" : "boolean"
+          },
+          "number" : {
+            "type" : "boolean"
+          },
+          "missingNode" : {
+            "type" : "boolean"
+          },
+          "valueNode" : {
+            "type" : "boolean"
+          },
+          "object" : {
+            "type" : "boolean"
+          },
+          "nodeType" : {
+            "type" : "string",
+            "enum" : [ "ARRAY", "BINARY", "BOOLEAN", "MISSING", "NULL", "NUMBER", "OBJECT", "POJO", "STRING" ]
+          },
+          "pojo" : {
+            "type" : "boolean"
+          },
+          "integralNumber" : {
+            "type" : "boolean"
+          },
+          "floatingPointNumber" : {
+            "type" : "boolean"
+          },
+          "short" : {
+            "type" : "boolean"
+          },
+          "int" : {
+            "type" : "boolean"
+          },
+          "long" : {
+            "type" : "boolean"
+          },
+          "double" : {
+            "type" : "boolean"
+          },
+          "bigDecimal" : {
+            "type" : "boolean"
+          },
+          "bigInteger" : {
+            "type" : "boolean"
+          },
+          "textual" : {
+            "type" : "boolean",
+            "deprecated" : true
+          },
+          "boolean" : {
+            "type" : "boolean"
+          },
+          "binary" : {
+            "type" : "boolean"
+          },
+          "embeddedValue" : {
+            "type" : "boolean"
+          }
+        }
+      },
       "PersonalDataExport" : {
         "type" : "object",
         "properties" : {
@@ -501,6 +579,9 @@
             "$ref" : "#/components/schemas/JsonNode"
           },
           "documents" : {
+            "$ref" : "#/components/schemas/JsonNode"
+          },
+          "payments" : {
             "$ref" : "#/components/schemas/JsonNode"
           }
         }

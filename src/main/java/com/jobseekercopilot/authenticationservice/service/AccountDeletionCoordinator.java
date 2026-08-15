@@ -28,6 +28,12 @@ public class AccountDeletionCoordinator {
             return operation;
         }
         try {
+            if (operation.isPaymentServiceRequired()
+                    && operation.getPaymentServiceCompletedAt() == null) {
+                downstream.revokePaymentAccess(operation.getUserId());
+                operation = transaction.markStep(
+                        operationId, AccountDeletionTransaction.Step.PAYMENT_SERVICE);
+            }
             if (operation.getDocumentStoreCompletedAt() == null) {
                 downstream.recoverablyDeleteDocuments(token(operation));
                 operation = transaction.markStep(
