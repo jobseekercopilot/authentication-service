@@ -8,6 +8,7 @@ import com.jobseekercopilot.authenticationservice.exception.TokenValidationExcep
 import com.jobseekercopilot.authenticationservice.identity.EmailIdentityCanonicalizer;
 import com.jobseekercopilot.authenticationservice.model.*;
 import com.jobseekercopilot.authenticationservice.repository.UserRepository;
+import com.jobseekercopilot.authenticationservice.repository.RegistrationLegalAcceptanceRepository;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.MalformedJwtException;
@@ -18,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.Duration;
@@ -37,6 +39,8 @@ public class AuthService {
     private final LoginAttemptService loginAttemptService;
     private final EmailIdentityCanonicalizer emailCanonicalizer;
     private final SessionTokenService sessionTokenService;
+    private final LegalAcceptancePolicy legalAcceptancePolicy;
+    private final RegistrationLegalAcceptanceRepository legalAcceptanceRepository;
     private final String dummyPasswordHash;
 
     public AuthService(
@@ -46,7 +50,9 @@ public class AuthService {
             PasswordPolicy passwordPolicy,
             LoginAttemptService loginAttemptService,
             EmailIdentityCanonicalizer emailCanonicalizer,
-            SessionTokenService sessionTokenService) {
+            SessionTokenService sessionTokenService,
+            LegalAcceptancePolicy legalAcceptancePolicy,
+            RegistrationLegalAcceptanceRepository legalAcceptanceRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
@@ -54,13 +60,17 @@ public class AuthService {
         this.loginAttemptService = loginAttemptService;
         this.emailCanonicalizer = emailCanonicalizer;
         this.sessionTokenService = sessionTokenService;
+        this.legalAcceptancePolicy = legalAcceptancePolicy;
+        this.legalAcceptanceRepository = legalAcceptanceRepository;
         this.dummyPasswordHash = passwordEncoder.encode(DUMMY_PASSWORD);
     }
 
+    @Transactional
     public void register(RegisterRequest request) {
         long startedAt = System.nanoTime();
         log.info("Registration request validation started hasRequest={}", request != null);
         passwordPolicy.validateRegistration(request);
+        legalAcceptancePolicy.requireAccepted(request);
 
         String name = request.getName().trim();
         var emailIdentity = emailCanonicalizer.normalize(request.getEmail());
@@ -91,9 +101,22 @@ public class AuthService {
                     (System.nanoTime() - startedAt) / 1_000_000);
             throw new ConflictException("An account with this email already exists.");
         }
+        legalAcceptanceRepository.save(
+                legalAcceptancePolicy.acceptanceFor(saved.getId()));
         log.info("User registered userId={} durationMs={}",
                 saved.getId(),
                 (System.nanoTime() - startedAt) / 1_000_000);
+    }
+
+    public RegistrationLegalAcceptanceResponse getRegistrationLegalAcceptance(
+            String userId) {
+        return legalAcceptanceRepository.findById(userId)
+                .map(RegistrationLegalAcceptanceResponse::from)
+                .orElse(null);
+    }
+
+    public RegistrationLegalRequirements getRegistrationLegalRequirements() {
+        return legalAcceptancePolicy.requirements();
     }
 
     public LoginResponse login(LoginRequest request) {

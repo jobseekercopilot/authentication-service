@@ -32,7 +32,7 @@ class PostgresPersistenceIntegrationTest {
 
     @Test
     void migratesAnEmptyPostgresDatabaseAndEnforcesIdentityConstraints() throws SQLException {
-        assertEquals(6, flyway().migrate().migrationsExecuted);
+        assertEquals(7, flyway().migrate().migrationsExecuted);
 
         try (Connection connection = connection(); Statement statement = connection.createStatement()) {
             statement.executeUpdate("""
@@ -86,6 +86,21 @@ class PostgresPersistenceIntegrationTest {
                                     CURRENT_TIMESTAMP + INTERVAL '30 minutes')
                             """.formatted("c".repeat(64))));
             assertEquals("23505", duplicateResetDigest.getSQLState());
+
+            statement.executeUpdate("""
+                    INSERT INTO registration_legal_acceptance
+                        (user_id, legal_version, terms_accepted,
+                         privacy_notice_acknowledged, age_eligibility_confirmed, accepted_at)
+                    VALUES
+                        ('first', '2026-08-15', TRUE, TRUE, TRUE, CURRENT_TIMESTAMP)
+                    """);
+            SQLException falseLegalAcceptance = assertThrows(SQLException.class,
+                    () -> statement.executeUpdate("""
+                            UPDATE registration_legal_acceptance
+                               SET terms_accepted = FALSE
+                             WHERE user_id = 'first'
+                            """));
+            assertEquals("23514", falseLegalAcceptance.getSQLState());
         }
     }
 
@@ -105,7 +120,7 @@ class PostgresPersistenceIntegrationTest {
                     """);
         }
 
-        assertEquals(5, flyway().migrate().migrationsExecuted);
+        assertEquals(6, flyway().migrate().migrationsExecuted);
         try (Connection connection = connection(); Statement statement = connection.createStatement();
                 var result = statement.executeQuery(
                         "SELECT email, canonical_email FROM users WHERE id = 'retained'")) {

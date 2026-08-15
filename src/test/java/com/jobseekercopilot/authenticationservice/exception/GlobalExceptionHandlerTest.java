@@ -44,4 +44,17 @@ class GlobalExceptionHandlerTest {
         assertEquals("AUTHENTICATION_FAILED", response.getBody().code());
         assertEquals("Invalid email or password.", response.getBody().message());
     }
+
+    @Test
+    void mapsLegalAcceptanceFailuresToStableActionableCodes() {
+        var required = handler.handleLegalAcceptance(
+                LegalAcceptanceException.required());
+        var outdated = handler.handleLegalAcceptance(
+                LegalAcceptanceException.outdated());
+
+        assertEquals(HttpStatus.BAD_REQUEST, required.getStatusCode());
+        assertEquals("LEGAL_ACCEPTANCE_REQUIRED", required.getBody().code());
+        assertEquals(HttpStatus.CONFLICT, outdated.getStatusCode());
+        assertEquals("LEGAL_VERSION_OUTDATED", outdated.getBody().code());
+    }
 }

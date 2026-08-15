@@ -5,6 +5,7 @@ import com.jobseekercopilot.authenticationservice.model.LoginResponse;
 import com.jobseekercopilot.authenticationservice.model.RegisterRequest;
 import com.jobseekercopilot.authenticationservice.model.RefreshRequest;
 import com.jobseekercopilot.authenticationservice.model.UserAccountResponse;
+import com.jobseekercopilot.authenticationservice.model.RegistrationLegalRequirements;
 import com.jobseekercopilot.authenticationservice.service.AuthService;
 import com.jobseekercopilot.authenticationservice.service.PasswordResetService;
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,21 @@ class AuthControllerTest {
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
         assertEquals("User registered successfully.", response.getBody().get("message"));
         verify(authService, times(1)).register(request);
+    }
+
+    @Test
+    void registrationRequirementsComeFromTheServerPolicy() {
+        var requirements = new RegistrationLegalRequirements(
+                "2026-08-15", 18,
+                "https://jobseekercopilot.com/terms",
+                "https://jobseekercopilot.com/privacy");
+        when(authService.getRegistrationLegalRequirements()).thenReturn(requirements);
+
+        var response = authController.registrationRequirements();
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(requirements, response.getBody());
+        assertTrue(response.getHeaders().getCacheControl().contains("no-cache"));
     }
 
     @Test

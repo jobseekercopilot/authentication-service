@@ -17,6 +17,11 @@ service. If a later implementation materialises export artifacts, they must be
 private, encrypted, single-use and automatically expire; that is not part of
 this synchronous implementation.
 
+The export includes the immutable registration legal-document version,
+acceptance timestamp, Terms acceptance, Privacy Notice acknowledgement and
+18-or-over confirmation. This record is removed with the authentication
+account after coordinated deletion completes.
+
 Recommended user-facing wording:
 
 - Export: “Download a copy of your Job Seeker Copilot data. For your security,

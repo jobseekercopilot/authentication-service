@@ -7,6 +7,7 @@ public record PersonalDataExport(
         String schemaVersion,
         Instant generatedAt,
         UserAccountResponse account,
+        RegistrationLegalAcceptanceResponse registrationLegalAcceptance,
         JsonNode profile,
         JsonNode applications,
         JsonNode documents) {
