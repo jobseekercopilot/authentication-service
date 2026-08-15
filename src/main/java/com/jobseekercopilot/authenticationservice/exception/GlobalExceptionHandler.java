@@ -22,6 +22,15 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.BAD_REQUEST, "REQUEST_VALIDATION_FAILED", "Request validation failed.");
     }
 
+    @ExceptionHandler(LegalAcceptanceException.class)
+    public ResponseEntity<ErrorResponse> handleLegalAcceptance(
+            LegalAcceptanceException exception) {
+        HttpStatus status = "LEGAL_VERSION_OUTDATED".equals(exception.getCode())
+                ? HttpStatus.CONFLICT
+                : HttpStatus.BAD_REQUEST;
+        return response(status, exception.getCode(), exception.getMessage());
+    }
+
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleMalformedJson() {
         return response(HttpStatus.BAD_REQUEST, "MALFORMED_JSON", "Request body is not valid JSON.");

@@ -157,7 +157,7 @@ class AuthenticationServiceIntegrationTest {
     @Test
     void register_Login_And_GetUser_HappyPath() {
         // Register
-        RegisterRequest registerRequest = new RegisterRequest(
+        RegisterRequest registerRequest = acceptedRegistration(
                 "John Doe", "john@test.com", "A memorable local passphrase 2026!");
         ResponseEntity<Map> registerResponse = restTemplate.postForEntity(
                 "/api/auth/register", registerRequest, Map.class);
@@ -191,15 +191,45 @@ class AuthenticationServiceIntegrationTest {
     }
 
     @Test
+    void registrationRequiresExplicitCurrentLegalAcceptance() {
+        RegisterRequest missingAge = new RegisterRequest(
+                "Missing Age", "missing-age@example.test",
+                "A legally reviewed passphrase 2026!",
+                true, true, false, "2026-08-15");
+        RegisterRequest staleVersion = new RegisterRequest(
+                "Stale Legal", "stale-legal@example.test",
+                "Another legally reviewed passphrase 2026!",
+                true, true, true, "2026-07-01");
+
+        ResponseEntity<Map> missing = restTemplate.postForEntity(
+                "/api/auth/register", missingAge, Map.class);
+        ResponseEntity<Map> stale = restTemplate.postForEntity(
+                "/api/auth/register", staleVersion, Map.class);
+
+        assertEquals(HttpStatus.BAD_REQUEST, missing.getStatusCode());
+        assertEquals("LEGAL_ACCEPTANCE_REQUIRED", missing.getBody().get("code"));
+        assertEquals(HttpStatus.CONFLICT, stale.getStatusCode());
+        assertEquals("LEGAL_VERSION_OUTDATED", stale.getBody().get("code"));
+        assertEquals(
+                HttpStatus.UNAUTHORIZED,
+                login("missing-age@example.test", "A legally reviewed passphrase 2026!")
+                        .getStatusCode());
+        assertEquals(
+                HttpStatus.UNAUTHORIZED,
+                login("stale-legal@example.test", "Another legally reviewed passphrase 2026!")
+                        .getStatusCode());
+    }
+
+    @Test
     void canonicalEmailVariantsShareOneAccountWhileDisplayAddressIsPreserved() {
         String password = "A canonical identity passphrase 2026!";
         ResponseEntity<Map> registration = restTemplate.postForEntity(
                 "/api/auth/register",
-                new RegisterRequest("Canonical User", "\u00a0Case.User@Example.Test\u2003", password),
+                acceptedRegistration("Canonical User", "\u00a0Case.User@Example.Test\u2003", password),
                 Map.class);
         ResponseEntity<Map> duplicate = restTemplate.postForEntity(
                 "/api/auth/register",
-                new RegisterRequest("Duplicate User", "case.user@example.test", password),
+                acceptedRegistration("Duplicate User", "case.user@example.test", password),
                 Map.class);
         ResponseEntity<Map> login = restTemplate.postForEntity(
                 "/api/auth/login",
@@ -239,7 +269,7 @@ class AuthenticationServiceIntegrationTest {
         String email = "uniform@example.test";
         restTemplate.postForEntity(
                 "/api/auth/register",
-                new RegisterRequest("Uniform User", email, "A unique uniform passphrase 2026!"),
+                acceptedRegistration("Uniform User", email, "A unique uniform passphrase 2026!"),
                 Map.class);
 
         ResponseEntity<Map> wrongPassword = restTemplate.postForEntity(
@@ -258,7 +288,7 @@ class AuthenticationServiceIntegrationTest {
         String email = "rate-limit@example.test";
         restTemplate.postForEntity(
                 "/api/auth/register",
-                new RegisterRequest("Rate Limit User", email, "A unique rate limit passphrase 2026!"),
+                acceptedRegistration("Rate Limit User", email, "A unique rate limit passphrase 2026!"),
                 Map.class);
 
         ResponseEntity<Map> first = login(email, "wrong-password");
@@ -364,7 +394,7 @@ class AuthenticationServiceIntegrationTest {
         String email = "refresh-session@example.test";
         String password = "A refresh session passphrase 2026!";
         restTemplate.postForEntity("/api/auth/register",
-                new RegisterRequest("Refresh User", email, password), Map.class);
+                acceptedRegistration("Refresh User", email, password), Map.class);
         ResponseEntity<Map> login = login(email, password);
         String firstAccess = (String) login.getBody().get("token");
         String firstRefresh = (String) login.getBody().get("refreshToken");
@@ -397,7 +427,7 @@ class AuthenticationServiceIntegrationTest {
         String email = "logout-session@example.test";
         String password = "A logout session passphrase 2026!";
         restTemplate.postForEntity("/api/auth/register",
-                new RegisterRequest("Logout User", email, password), Map.class);
+                acceptedRegistration("Logout User", email, password), Map.class);
         ResponseEntity<Map> login = login(email, password);
         String access = (String) login.getBody().get("token");
 
@@ -431,6 +461,12 @@ class AuthenticationServiceIntegrationTest {
 
     private ResponseEntity<Map> login(String email, String password) {
         return restTemplate.postForEntity("/api/auth/login", new LoginRequest(email, password), Map.class);
+    }
+
+    private RegisterRequest acceptedRegistration(
+            String name, String email, String password) {
+        return new RegisterRequest(
+                name, email, password, true, true, true, "2026-08-15");
     }
 
     private String url(String path) {

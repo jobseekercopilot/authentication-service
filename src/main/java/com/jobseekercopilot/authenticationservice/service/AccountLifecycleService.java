@@ -44,12 +44,14 @@ public class AccountLifecycleService {
         String userId = authService.validateRecentlyAuthenticated(
                 accessToken, recentAuthenticationAge);
         return new PersonalDataExport(
-                "job-seeker-copilot-personal-data.v1",
+                "job-seeker-copilot-personal-data.v3",
                 clock.instant(),
                 authService.getUserAccount(userId),
+                authService.getRegistrationLegalAcceptance(userId),
                 downstream.exportProfile(accessToken),
                 downstream.exportApplications(accessToken),
-                downstream.exportDocuments(accessToken));
+                downstream.exportDocuments(accessToken),
+                downstream.exportPayments(userId));
     }
 
     public AccountDeletionResponse delete(String accessToken, String idempotencyKey) {

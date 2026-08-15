@@ -48,7 +48,9 @@ class AccountDeletionCoordinatorTest {
         when(transaction.get(operation.getId())).thenReturn(operation);
         when(transaction.markStep(any(), any())).thenAnswer(invocation -> {
             AccountDeletionTransaction.Step step = invocation.getArgument(1);
-            if (step == AccountDeletionTransaction.Step.DOCUMENT_STORE) {
+            if (step == AccountDeletionTransaction.Step.PAYMENT_SERVICE) {
+                operation.setPaymentServiceCompletedAt(NOW);
+            } else if (step == AccountDeletionTransaction.Step.DOCUMENT_STORE) {
                 operation.setDocumentStoreCompletedAt(NOW);
             } else if (step == AccountDeletionTransaction.Step.APPLICATION_TRACKER) {
                 operation.setApplicationTrackerCompletedAt(NOW);
@@ -66,6 +68,9 @@ class AccountDeletionCoordinatorTest {
                 coordinator.process("operation-123").getStatus());
 
         InOrder order = inOrder(downstream, transaction);
+        order.verify(downstream).revokePaymentAccess("user-123");
+        order.verify(transaction).markStep(
+                "operation-123", AccountDeletionTransaction.Step.PAYMENT_SERVICE);
         order.verify(downstream).recoverablyDeleteDocuments("lifecycle-token");
         order.verify(transaction).markStep(
                 "operation-123", AccountDeletionTransaction.Step.DOCUMENT_STORE);
@@ -81,6 +86,7 @@ class AccountDeletionCoordinatorTest {
     @Test
     void recordsRetryAndDoesNotRepeatCompletedSteps() {
         AccountDeletionOperation operation = operation();
+        operation.setPaymentServiceCompletedAt(NOW);
         operation.setDocumentStoreCompletedAt(NOW);
         when(transaction.get(operation.getId())).thenReturn(operation);
         org.mockito.Mockito.doThrow(new AccountLifecycleDownstreamException(
@@ -94,6 +100,7 @@ class AccountDeletionCoordinatorTest {
                 coordinator.process("operation-123").getStatus());
 
         verify(downstream, never()).recoverablyDeleteDocuments(any());
+        verify(downstream, never()).revokePaymentAccess(any());
         verify(downstream).eraseApplications("lifecycle-token");
         verify(downstream, never()).eraseProfile(any());
         verify(transaction).markFailure("operation-123", "TRACKER_UNAVAILABLE");
@@ -107,6 +114,8 @@ class AccountDeletionCoordinatorTest {
                 "a".repeat(64),
                 AccountDeletionStatus.PENDING,
                 null,
+                null,
+                true,
                 null,
                 null,
                 0,

@@ -3,7 +3,7 @@
   "info" : {
     "title" : "Jobseeker Copilot - Authentication Service API",
     "description" : "Authentication and user management microservice providing JWT-based stateless authentication, user registration, and token validation.",
-    "version" : "1.1.0"
+    "version" : "2.1.0"
   },
   "servers" : [ {
     "url" : "http://localhost",
@@ -197,6 +197,26 @@
         }
       }
     },
+    "/api/auth/registration-requirements" : {
+      "get" : {
+        "tags" : [ "Authentication" ],
+        "summary" : "Get the current registration legal requirements",
+        "description" : "Returns the server-authoritative legal version, minimum age and reviewed HTTPS document URLs required for registration.",
+        "operationId" : "getRegistrationLegalRequirements",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RegistrationLegalRequirements"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/me" : {
       "get" : {
         "tags" : [ "Authentication" ],
@@ -337,6 +357,7 @@
     "schemas" : {
       "RegisterRequest" : {
         "type" : "object",
+        "additionalProperties" : false,
         "properties" : {
           "name" : {
             "type" : "string"
@@ -346,8 +367,27 @@
           },
           "password" : {
             "type" : "string"
+          },
+          "termsAccepted" : {
+            "type" : "boolean",
+            "description" : "Must be true after the user has actively accepted the current Terms of Use."
+          },
+          "privacyNoticeAcknowledged" : {
+            "type" : "boolean",
+            "description" : "Must be true after the user has acknowledged the current Privacy Notice."
+          },
+          "ageEligibilityConfirmed" : {
+            "type" : "boolean",
+            "description" : "Must be true to confirm the registrant is at least 18 years old."
+          },
+          "legalVersion" : {
+            "type" : "string",
+            "description" : "Exact reviewed legal-document version displayed to the user.",
+            "maxLength" : 64,
+            "minLength" : 1
           }
-        }
+        },
+        "required" : [ "ageEligibilityConfirmed", "legalVersion", "privacyNoticeAcknowledged", "termsAccepted" ]
       },
       "RefreshRequest" : {
         "type" : "object",
@@ -405,6 +445,24 @@
           }
         }
       },
+      "RegistrationLegalRequirements" : {
+        "type" : "object",
+        "properties" : {
+          "legalVersion" : {
+            "type" : "string"
+          },
+          "minimumAge" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "termsUrl" : {
+            "type" : "string"
+          },
+          "privacyNoticeUrl" : {
+            "type" : "string"
+          }
+        }
+      },
       "UserAccountResponse" : {
         "type" : "object",
         "properties" : {
@@ -419,7 +477,85 @@
           }
         }
       },
-      "JsonNode" : { },
+      "JsonNode" : {
+        "type" : "object",
+        "properties" : {
+          "array" : {
+            "type" : "boolean"
+          },
+          "empty" : {
+            "type" : "boolean"
+          },
+          "null" : {
+            "type" : "boolean"
+          },
+          "float" : {
+            "type" : "boolean"
+          },
+          "string" : {
+            "type" : "boolean"
+          },
+          "container" : {
+            "type" : "boolean"
+          },
+          "number" : {
+            "type" : "boolean"
+          },
+          "missingNode" : {
+            "type" : "boolean"
+          },
+          "valueNode" : {
+            "type" : "boolean"
+          },
+          "object" : {
+            "type" : "boolean"
+          },
+          "nodeType" : {
+            "type" : "string",
+            "enum" : [ "ARRAY", "BINARY", "BOOLEAN", "MISSING", "NULL", "NUMBER", "OBJECT", "POJO", "STRING" ]
+          },
+          "pojo" : {
+            "type" : "boolean"
+          },
+          "integralNumber" : {
+            "type" : "boolean"
+          },
+          "floatingPointNumber" : {
+            "type" : "boolean"
+          },
+          "short" : {
+            "type" : "boolean"
+          },
+          "int" : {
+            "type" : "boolean"
+          },
+          "long" : {
+            "type" : "boolean"
+          },
+          "double" : {
+            "type" : "boolean"
+          },
+          "bigDecimal" : {
+            "type" : "boolean"
+          },
+          "bigInteger" : {
+            "type" : "boolean"
+          },
+          "textual" : {
+            "type" : "boolean",
+            "deprecated" : true
+          },
+          "boolean" : {
+            "type" : "boolean"
+          },
+          "binary" : {
+            "type" : "boolean"
+          },
+          "embeddedValue" : {
+            "type" : "boolean"
+          }
+        }
+      },
       "PersonalDataExport" : {
         "type" : "object",
         "properties" : {
@@ -433,6 +569,9 @@
           "account" : {
             "$ref" : "#/components/schemas/UserAccountResponse"
           },
+          "registrationLegalAcceptance" : {
+            "$ref" : "#/components/schemas/RegistrationLegalAcceptanceResponse"
+          },
           "profile" : {
             "$ref" : "#/components/schemas/JsonNode"
           },
@@ -441,6 +580,30 @@
           },
           "documents" : {
             "$ref" : "#/components/schemas/JsonNode"
+          },
+          "payments" : {
+            "$ref" : "#/components/schemas/JsonNode"
+          }
+        }
+      },
+      "RegistrationLegalAcceptanceResponse" : {
+        "type" : "object",
+        "properties" : {
+          "legalVersion" : {
+            "type" : "string"
+          },
+          "termsAccepted" : {
+            "type" : "boolean"
+          },
+          "privacyNoticeAcknowledged" : {
+            "type" : "boolean"
+          },
+          "ageEligibilityConfirmed" : {
+            "type" : "boolean"
+          },
+          "acceptedAt" : {
+            "type" : "string",
+            "format" : "date-time"
           }
         }
       },

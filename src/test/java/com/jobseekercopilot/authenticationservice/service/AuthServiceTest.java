@@ -7,6 +7,7 @@ import com.jobseekercopilot.authenticationservice.exception.UnauthorizedExceptio
 import com.jobseekercopilot.authenticationservice.identity.EmailIdentityCanonicalizer;
 import com.jobseekercopilot.authenticationservice.model.*;
 import com.jobseekercopilot.authenticationservice.repository.UserRepository;
+import com.jobseekercopilot.authenticationservice.repository.RegistrationLegalAcceptanceRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -15,7 +16,10 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.junit.jupiter.api.BeforeEach;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -43,19 +47,29 @@ class AuthServiceTest {
     @Mock
     private SessionTokenService sessionTokenService;
 
+    @Mock
+    private RegistrationLegalAcceptanceRepository legalAcceptanceRepository;
+
     private AuthService authService;
     private final EmailIdentityCanonicalizer emailCanonicalizer = new EmailIdentityCanonicalizer();
 
     @BeforeEach
     void setUp() {
         when(passwordEncoder.encode("authentication-timing-placeholder")).thenReturn("dummy-hash");
+        LegalAcceptancePolicy legalAcceptancePolicy = new LegalAcceptancePolicy(
+                "2026-08-15",
+                "https://jobseekercopilot.com/terms",
+                "https://jobseekercopilot.com/privacy",
+                Clock.fixed(Instant.parse("2026-08-15T00:00:00Z"), ZoneOffset.UTC));
         authService = new AuthService(userRepository, passwordEncoder, jwtTokenProvider,
-                passwordPolicy, loginAttemptService, emailCanonicalizer, sessionTokenService);
+                passwordPolicy, loginAttemptService, emailCanonicalizer, sessionTokenService,
+                legalAcceptancePolicy, legalAcceptanceRepository);
     }
 
     @Test
     void register_ShouldSucceed() {
-        RegisterRequest request = new RegisterRequest("John", "john@test.com", "A-valid-local password 2026!");
+        RegisterRequest request = accepted(
+                "John", "john@test.com", "A-valid-local password 2026!");
         when(userRepository.findByCanonicalEmail("john@test.com")).thenReturn(Optional.empty());
         when(passwordEncoder.encode("A-valid-local password 2026!")).thenReturn("hashed-password");
         when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
@@ -66,11 +80,16 @@ class AuthServiceTest {
         verify(userRepository).save(argThat(user ->
                 user.getEmail().equals("john@test.com")
                         && user.getCanonicalEmail().equals("john@test.com")));
+        verify(legalAcceptanceRepository).save(argThat(acceptance ->
+                acceptance.getUserId() != null
+                        && acceptance.getLegalVersion().equals("2026-08-15")
+                        && acceptance.isAgeEligibilityConfirmed()));
     }
 
     @Test
     void register_ShouldThrowConflict_WhenEmailExists() {
-        RegisterRequest request = new RegisterRequest("John", "existing@test.com", "A-valid-local password 2026!");
+        RegisterRequest request = accepted(
+                "John", "existing@test.com", "A-valid-local password 2026!");
         when(userRepository.findByCanonicalEmail("existing@test.com")).thenReturn(Optional.of(new User()));
 
         assertThrows(ConflictException.class, () -> authService.register(request));
@@ -79,7 +98,7 @@ class AuthServiceTest {
 
     @Test
     void registerPreservesDisplayEmailAndRejectsCanonicalVariant() {
-        RegisterRequest request = new RegisterRequest(
+        RegisterRequest request = accepted(
                 "John", "\u00a0Case.User@Example.Test\u2003", "A-valid-local password 2026!");
         when(userRepository.findByCanonicalEmail("case.user@example.test"))
                 .thenReturn(Optional.empty());
@@ -95,7 +114,7 @@ class AuthServiceTest {
 
     @Test
     void concurrentCanonicalConstraintConflictReturnsStableAccountConflict() {
-        RegisterRequest request = new RegisterRequest(
+        RegisterRequest request = accepted(
                 "John", "Case.User@Example.Test", "A-valid-local password 2026!");
         when(userRepository.findByCanonicalEmail("case.user@example.test"))
                 .thenReturn(Optional.empty());
@@ -256,6 +275,21 @@ class AuthServiceTest {
     }
 
     @Test
+    void returnsRegistrationLegalAcceptanceForPersonalDataExport() {
+        var acceptance = new RegistrationLegalAcceptance(
+                "user-123", "2026-08-15", true, true, true,
+                Instant.parse("2026-08-15T00:00:00Z"));
+        when(legalAcceptanceRepository.findById("user-123"))
+                .thenReturn(Optional.of(acceptance));
+
+        var response = authService.getRegistrationLegalAcceptance("user-123");
+
+        assertEquals("2026-08-15", response.legalVersion());
+        assertTrue(response.ageEligibilityConfirmed());
+        assertEquals(acceptance.getAcceptedAt(), response.acceptedAt());
+    }
+
+    @Test
     void validate_ShouldReturnUserId() {
         AccessTokenClaims claims = new AccessTokenClaims("user-123", "session-123");
         when(jwtTokenProvider.parseAccessToken("valid-token")).thenReturn(claims);
@@ -264,5 +298,10 @@ class AuthServiceTest {
 
         assertEquals("user-123", result);
         verify(sessionTokenService).validate(claims);
+    }
+
+    private RegisterRequest accepted(String name, String email, String password) {
+        return new RegisterRequest(
+                name, email, password, true, true, true, "2026-08-15");
     }
 }

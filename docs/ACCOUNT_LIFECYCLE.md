@@ -1,7 +1,7 @@
-# Private-beta account export and deletion
+# Public-beta account export and deletion
 
 Status: AUTH-08 policy approved on 2026-08-07. This document separates the
-private-beta implementation boundary from the later production irreversible
+public-beta implementation boundary from the later production irreversible
 purge release gate.
 
 ## User contract
@@ -9,13 +9,21 @@ purge release gate.
 An authenticated user who has signed in within the last 15 minutes can:
 
 - download one synchronous JSON export of Authentication, Profile,
-  Application Tracker and Document Store data; and
+  Application Tracker, Document Store and retained Payment records; and
 - request account deletion with a retry-safe `Idempotency-Key`.
 
 Export responses use `Cache-Control: no-store` and are not persisted by the
 service. If a later implementation materialises export artifacts, they must be
 private, encrypted, single-use and automatically expire; that is not part of
 this synchronous implementation.
+
+The export includes the immutable registration legal-document version,
+acceptance timestamp, Terms acceptance, Privacy Notice acknowledgement and
+18-or-over confirmation. This record is removed with the authentication
+account after coordinated deletion completes. It also includes the user's
+document-credit wallet and content-free payment ledger, order and provider
+reconciliation evidence. It never includes card details, billing addresses,
+payment-provider secrets or document content.
 
 Recommended user-facing wording:
 
@@ -45,13 +53,18 @@ lifecycle routes and cannot call normal user APIs.
 
 The coordinator runs in this order:
 
-1. Document Store applies DOC-09 recoverable deletion and preserves held
+1. Payment Service revokes document-credit and Checkout access, expires any
+   still-open Stripe Checkout sessions through its own retry-safe provider
+   boundary, and retains the statutory financial/reconciliation record.
+   Authentication never calls Stripe directly and does not checkpoint this
+   step while provider-session expiry is pending.
+2. Document Store applies DOC-09 recoverable deletion and preserves held
    records and truthful application-linked identity.
-2. Application Tracker erases the account's application records, workflows,
+3. Application Tracker erases the account's application records, workflows,
    availability projections and append-only events through its narrowly scoped
    transactional erasure guard.
-3. User Profile erases the profile, evidence revisions and snapshots.
-4. Authentication removes the already-scrubbed user row and completes the
+4. User Profile erases the profile, evidence revisions and snapshots.
+5. Authentication removes the already-scrubbed user row and completes the
    journal.
 
 Each completed step is checkpointed. A scheduled worker resumes only missing
@@ -67,6 +80,9 @@ retention of completed operation journals, indefinite retention of unresolved
 recovery records/cursors, 365-day content-free lifecycle audit, and protection
 of application-used identity while supported application history exists.
 Legal holds are retained and do not block closing the user's login account.
+Payment records required for fraud, tax, accounting, refund, dispute and
+provider reconciliation are retained for the configured statutory period;
+retention does not preserve purchase or Checkout access.
 
 Only the peer-approved retention-administrator procedure in Document Store may
 apply/release a legal hold or invoke guarded purge. Support and operators must

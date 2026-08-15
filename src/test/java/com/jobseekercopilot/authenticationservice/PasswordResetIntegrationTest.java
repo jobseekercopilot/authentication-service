@@ -250,7 +250,10 @@ class PasswordResetIntegrationTest {
     private void register(String email) {
         ResponseEntity<Map> response = exchange(
                 "/api/auth/register", HttpMethod.POST,
-                new RegisterRequest("Reset Test User", email, ORIGINAL_PASSWORD), Map.class);
+                new RegisterRequest(
+                        "Reset Test User", email, ORIGINAL_PASSWORD,
+                        true, true, true, "2026-08-15"),
+                Map.class);
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
     }
 

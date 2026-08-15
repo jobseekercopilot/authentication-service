@@ -20,7 +20,7 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("Jobseeker Copilot - Authentication Service API")
                         .description("Authentication and user management microservice providing JWT-based stateless authentication, user registration, and token validation.")
-                        .version("1.1.0"))
+                        .version("2.1.0"))
                 .components(new Components()
                         .addSecuritySchemes("bearerAuth", new SecurityScheme()
                                 .type(SecurityScheme.Type.HTTP)

@@ -67,6 +67,18 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    @GetMapping(value = "/registration-requirements", produces = "application/json")
+    @Operation(
+            operationId = "getRegistrationLegalRequirements",
+            summary = "Get the current registration legal requirements",
+            description = "Returns the server-authoritative legal version, minimum age and reviewed HTTPS document URLs required for registration.")
+    @Tag(name = "Authentication")
+    public ResponseEntity<RegistrationLegalRequirements> registrationRequirements() {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noCache())
+                .body(authService.getRegistrationLegalRequirements());
+    }
+
     @PostMapping("/login")
     @Operation(summary = "Authenticate user and get JWT token", description = "Authenticates a user with username and password credentials. Returns a JWT token and user details upon successful authentication.")
     @Tag(name = "Authentication")

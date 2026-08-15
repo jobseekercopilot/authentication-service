@@ -48,6 +48,7 @@ class ProductionSecurityConfigurationIntegrationTest {
         properties.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         properties.add("spring.datasource.username", POSTGRES::getUsername);
         properties.add("spring.datasource.password", POSTGRES::getPassword);
+        properties.add("auth.legal.documents-reviewed", () -> "true");
     }
 
     @LocalServerPort

@@ -67,6 +67,16 @@ class OpenApiContractPolicyTest {
                 "bearerAuth and serviceToken must be required together");
     }
 
+    @Test
+    void registrationLegalRequirementWeakeningIsRejected() throws Exception {
+        ObjectNode changed = contract().deepCopy();
+        ((ArrayNode) changed.at("/components/schemas/RegisterRequest/required"))
+                .removeAll();
+        assertViolation(
+                violations(changed, null, null),
+                "registration legal acceptance fields must all be required");
+    }
+
     private static ObjectNode contract() throws Exception {
         return (ObjectNode) OBJECT_MAPPER.readTree(Files.readAllBytes(CONTRACT));
     }
@@ -97,6 +107,45 @@ class OpenApiContractPolicyTest {
         if (operation.isMissingNode()
                 || !"getCurrentUser".equals(operation.path("operationId").asText())) {
             failures.add("getCurrentUser operation is missing");
+        }
+
+        if (!"2.1.0".equals(contract.at("/info/version").asText())) {
+            failures.add("authentication contract must declare version 2.1.0");
+        }
+
+        JsonNode registrationOperation = contract.at(
+                "/paths/~1api~1auth~1register/post");
+        if (!"register".equals(registrationOperation.path("operationId").asText())) {
+            failures.add("register operation is missing");
+        }
+        JsonNode requirementsOperation = contract.at(
+                "/paths/~1api~1auth~1registration-requirements/get");
+        if (!"getRegistrationLegalRequirements".equals(
+                requirementsOperation.path("operationId").asText())) {
+            failures.add("registration requirements operation is missing");
+        }
+
+        JsonNode registerSchema = contract.at("/components/schemas/RegisterRequest");
+        Set<String> requiredRegistrationFields = Set.of(
+                "termsAccepted",
+                "privacyNoticeAcknowledged",
+                "ageEligibilityConfirmed",
+                "legalVersion");
+        if (!registerSchema.path("required").isArray()
+                || !Set.copyOf(iterableTextValues(registerSchema.path("required")))
+                        .equals(requiredRegistrationFields)) {
+            failures.add("registration legal acceptance fields must all be required");
+        }
+        if (registerSchema.path("additionalProperties").asBoolean(true)) {
+            failures.add("registration request must reject unknown fields");
+        }
+        JsonNode requirementsProperties = contract.at(
+                "/components/schemas/RegistrationLegalRequirements/properties");
+        for (String field : List.of(
+                "legalVersion", "minimumAge", "termsUrl", "privacyNoticeUrl")) {
+            if (!requirementsProperties.has(field)) {
+                failures.add("registration requirements field is missing: " + field);
+            }
         }
 
         JsonNode security = operation.path("security");
@@ -144,6 +193,11 @@ class OpenApiContractPolicyTest {
         if (!requiredIdempotencyKey) {
             failures.add("deleteAccount requires a bounded Idempotency-Key");
         }
+        JsonNode exportProperties = contract.at(
+                "/components/schemas/PersonalDataExport/properties");
+        if (!exportProperties.has("payments")) {
+            failures.add("personal-data export must include retained payment records");
+        }
 
         JsonNode bearer = contract.at("/components/securitySchemes/bearerAuth");
         if (!"http".equals(bearer.path("type").asText())
@@ -176,6 +230,12 @@ class OpenApiContractPolicyTest {
         List<String> names = new ArrayList<>();
         node.fieldNames().forEachRemaining(names::add);
         return names;
+    }
+
+    private static List<String> iterableTextValues(JsonNode node) {
+        List<String> values = new ArrayList<>();
+        node.elements().forEachRemaining(value -> values.add(value.asText()));
+        return values;
     }
 
     private static void assertViolation(List<String> violations, String expected) {

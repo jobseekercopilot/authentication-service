@@ -1,6 +1,7 @@
 package com.jobseekercopilot.authenticationservice;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -32,7 +33,7 @@ class PostgresPersistenceIntegrationTest {
 
     @Test
     void migratesAnEmptyPostgresDatabaseAndEnforcesIdentityConstraints() throws SQLException {
-        assertEquals(6, flyway().migrate().migrationsExecuted);
+        assertEquals(8, flyway().migrate().migrationsExecuted);
 
         try (Connection connection = connection(); Statement statement = connection.createStatement()) {
             statement.executeUpdate("""
@@ -86,6 +87,38 @@ class PostgresPersistenceIntegrationTest {
                                     CURRENT_TIMESTAMP + INTERVAL '30 minutes')
                             """.formatted("c".repeat(64))));
             assertEquals("23505", duplicateResetDigest.getSQLState());
+
+            statement.executeUpdate("""
+                    INSERT INTO registration_legal_acceptance
+                        (user_id, legal_version, terms_accepted,
+                         privacy_notice_acknowledged, age_eligibility_confirmed, accepted_at)
+                    VALUES
+                        ('first', '2026-08-15', TRUE, TRUE, TRUE, CURRENT_TIMESTAMP)
+                    """);
+            SQLException falseLegalAcceptance = assertThrows(SQLException.class,
+                    () -> statement.executeUpdate("""
+                            UPDATE registration_legal_acceptance
+                               SET terms_accepted = FALSE
+                             WHERE user_id = 'first'
+                            """));
+            assertEquals("23514", falseLegalAcceptance.getSQLState());
+
+            SQLException incompleteDeletion = assertThrows(SQLException.class,
+                    () -> statement.executeUpdate("""
+                            INSERT INTO account_deletion_operation
+                                (id, user_id, idempotency_key_hash, status,
+                                 document_store_completed_at,
+                                 application_tracker_completed_at,
+                                 user_profile_completed_at,
+                                 attempt_count, created_at, updated_at, completed_at,
+                                 retention_expires_at, operation_version)
+                            VALUES
+                                ('deletion-without-payment', 'first', '%s', 'COMPLETED',
+                                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+                                 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+                                 CURRENT_TIMESTAMP + INTERVAL '365 days', 0)
+                            """.formatted("e".repeat(64))));
+            assertEquals("23514", incompleteDeletion.getSQLState());
         }
     }
 
@@ -105,13 +138,51 @@ class PostgresPersistenceIntegrationTest {
                     """);
         }
 
-        assertEquals(5, flyway().migrate().migrationsExecuted);
+        assertEquals(7, flyway().migrate().migrationsExecuted);
         try (Connection connection = connection(); Statement statement = connection.createStatement();
                 var result = statement.executeQuery(
                         "SELECT email, canonical_email FROM users WHERE id = 'retained'")) {
             assertTrue(result.next());
             assertEquals("retained@example.test", result.getString("email"));
             assertEquals("retained@example.test", result.getString("canonical_email"));
+        }
+    }
+
+    @Test
+    void preservesCompletedPrePaymentDeletionEvidenceWithoutInventingAProviderCall()
+            throws SQLException {
+        Flyway versionSeven = Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .cleanDisabled(false)
+                .target("7")
+                .load();
+        assertEquals(7, versionSeven.migrate().migrationsExecuted);
+        try (Connection connection = connection(); Statement statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                    INSERT INTO account_deletion_operation
+                        (id, user_id, idempotency_key_hash, status,
+                         document_store_completed_at, application_tracker_completed_at,
+                         user_profile_completed_at, attempt_count, created_at, updated_at,
+                         completed_at, retention_expires_at, operation_version)
+                    VALUES
+                        ('legacy-completed-deletion', 'deleted-owner', '%s', 'COMPLETED',
+                         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0,
+                         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+                         CURRENT_TIMESTAMP + INTERVAL '365 days', 0)
+                    """.formatted("f".repeat(64)));
+        }
+
+        assertEquals(1, flyway().migrate().migrationsExecuted);
+
+        try (Connection connection = connection(); Statement statement = connection.createStatement();
+                var result = statement.executeQuery("""
+                        SELECT payment_service_required, payment_service_completed_at
+                          FROM account_deletion_operation
+                         WHERE id = 'legacy-completed-deletion'
+                        """)) {
+            assertTrue(result.next());
+            assertTrue(!result.getBoolean("payment_service_required"));
+            assertNull(result.getTimestamp("payment_service_completed_at"));
         }
     }
 
