@@ -3,8 +3,11 @@ package com.jobseekercopilot.authenticationservice.controller;
 import com.jobseekercopilot.authenticationservice.model.LoginRequest;
 import com.jobseekercopilot.authenticationservice.model.LoginResponse;
 import com.jobseekercopilot.authenticationservice.model.RegisterRequest;
+import com.jobseekercopilot.authenticationservice.model.RefreshRequest;
 import com.jobseekercopilot.authenticationservice.model.UserAccountResponse;
+import com.jobseekercopilot.authenticationservice.model.RegistrationLegalRequirements;
 import com.jobseekercopilot.authenticationservice.service.AuthService;
+import com.jobseekercopilot.authenticationservice.service.PasswordResetService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -24,6 +27,9 @@ class AuthControllerTest {
     @Mock
     private AuthService authService;
 
+    @Mock
+    private PasswordResetService passwordResetService;
+
     @InjectMocks
     private AuthController authController;
 
@@ -37,6 +43,21 @@ class AuthControllerTest {
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
         assertEquals("User registered successfully.", response.getBody().get("message"));
         verify(authService, times(1)).register(request);
+    }
+
+    @Test
+    void registrationRequirementsComeFromTheServerPolicy() {
+        var requirements = new RegistrationLegalRequirements(
+                "2026-08-15", 18,
+                "https://jobseekercopilot.com/terms",
+                "https://jobseekercopilot.com/privacy");
+        when(authService.getRegistrationLegalRequirements()).thenReturn(requirements);
+
+        var response = authController.registrationRequirements();
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(requirements, response.getBody());
+        assertTrue(response.getHeaders().getCacheControl().contains("no-cache"));
     }
 
     @Test
@@ -68,5 +89,25 @@ class AuthControllerTest {
         assertEquals("John", response.getBody().getName());
         verify(authService, times(1)).validate("valid-token");
         verify(authService, times(1)).getUserAccount(userId);
+    }
+
+    @Test
+    void refreshReturnsRotatedTokenPair() {
+        RefreshRequest request = new RefreshRequest("refresh-token");
+        LoginResponse rotated = new LoginResponse("access", "next-refresh", "Bearer", 900);
+        when(authService.refresh("refresh-token")).thenReturn(rotated);
+
+        ResponseEntity<LoginResponse> response = authController.refresh(request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("next-refresh", response.getBody().getRefreshToken());
+    }
+
+    @Test
+    void logoutRevokesBearerSession() {
+        ResponseEntity<Void> response = authController.logout("Bearer access-token");
+
+        assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
+        verify(authService).logout("access-token");
     }
 }

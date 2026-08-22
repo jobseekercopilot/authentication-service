@@ -1,0 +1,11 @@
+# Reviewed historical false positives: synthetic test fixtures and README examples.
+6b6b2850f7e8300bcfde8f1db463efdf6d688147:src/test/java/com/jobseekercopilot/authenticationservice/exception/GlobalExceptionHandlerTest.java:generic-api-key:24
+ce951d7c8ff9a427337a9cea764253297b6e578b:src/test/java/com/jobseekercopilot/authenticationservice/service/JwtTokenProviderTest.java:generic-api-key:18
+6399a535459f9c87be4653f375662de59932a4f7:src/test/java/com/jobseekercopilot/authenticationservice/service/JwtTokenProviderTest.java:generic-api-key:18
+7628eebdafda35870277666755ad2dd60a4edd77:src/test/java/com/jobseekercopilot/authenticationservice/service/JwtTokenProviderTest.java:generic-api-key:18
+6399a535459f9c87be4653f375662de59932a4f7:README.md:curl-auth-header:158
+6399a535459f9c87be4653f375662de59932a4f7:README.md:generic-api-key:149
+ce951d7c8ff9a427337a9cea764253297b6e578b:README.md:curl-auth-header:158
+ce951d7c8ff9a427337a9cea764253297b6e578b:README.md:generic-api-key:149
+fd1d0b2e752d945ee07383dfad4494e1750a878d:README.md:curl-auth-header:158
+fd1d0b2e752d945ee07383dfad4494e1750a878d:README.md:generic-api-key:149

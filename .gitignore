@@ -1,46 +1,18 @@
-# Maven
-target/
-pom.xml.tag
-pom.xml.releaseBackup
-pom.xml.versionsBackup
-pom.xml.next
-release.properties
-dependency-reduced-pom.xml
-buildNumber.properties
-.mvn/timing.properties
-.mvn/wrapper/maven-wrapper.jar
-
-# IDE
-.idea/
-*.iml
-.vscode/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-logs/
-
-# Environment
 .env
-.env.local
-application-local.properties
-application-dev.properties
-application-prod.properties
-
-# Build
+.env.*
+!.env.example
+.idea/
+.vscode/
+target/
+libs/
 *.class
 *.jar
-*.war
-*.ear
-*.zip
-*.tar.gz
-*.rar
-
-# Test
-test-output/
+*.db
+*.mv.db
+*.trace.db
+data/
+coverage/
+reports/
+*.log
+.DS_Store
+Thumbs.db

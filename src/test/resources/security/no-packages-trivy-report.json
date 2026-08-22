@@ -1,0 +1,6 @@
+{
+  "SchemaVersion": 2,
+  "ArtifactName": "empty-scan-target",
+  "ArtifactType": "filesystem",
+  "Results": []
+}

@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+    environment:
+      POSTGRES_DB: authentication
+      POSTGRES_USER: authentication
+      POSTGRES_PASSWORD: "${AUTH_DB_PASSWORD:?Run ./scripts/generate-local-signing-key.sh first}"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username authentication --dbname authentication"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    volumes:
+      - auth-postgres-data:/var/lib/postgresql/data
+
+  authentication-service:
+    image: authentication-service:local
+    build:
+      context: .
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 35s
+    ports:
+      - "${AUTH_PORT:-8084}:8084"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8084/actuator/health"]
+      interval: 10s
+      timeout: 3s
+      start_period: 30s
+      retries: 6
+    environment:
+      SPRING_PROFILES_ACTIVE: production
+      JWT_PRIVATE_KEY_BASE64: "${JWT_PRIVATE_KEY_BASE64:?Run ./scripts/generate-local-signing-key.sh first}"
+      JWT_PUBLIC_KEY_BASE64: "${JWT_PUBLIC_KEY_BASE64:?Run ./scripts/generate-local-signing-key.sh first}"
+      JWT_PREVIOUS_PUBLIC_KEYS: "${JWT_PREVIOUS_PUBLIC_KEYS:-}"
+      AUTH_DB_URL: jdbc:postgresql://postgres:5432/authentication
+      AUTH_DB_USERNAME: authentication
+      AUTH_DB_PASSWORD: "${AUTH_DB_PASSWORD:?Run ./scripts/generate-local-signing-key.sh first}"
+      AUTH_SERVICE_TOKEN: "${AUTH_SERVICE_TOKEN:?Configure the gateway service identity first}"
+      AUTH_ENVIRONMENT_DATA_TOKEN: "${AUTH_ENVIRONMENT_DATA_TOKEN:?Configure the separate environment-data identity first}"
+      JWT_ACCESS_TOKEN_EXPIRATION_MS: "${JWT_ACCESS_TOKEN_EXPIRATION_MS:-900000}"
+      JWT_ISSUER: "${JWT_ISSUER:-job-seeker-copilot-authentication}"
+      JWT_AUDIENCE: "${JWT_AUDIENCE:-job-seeker-copilot-services}"
+      JWT_KEY_ID: "${JWT_KEY_ID:-primary}"
+      JWT_CLOCK_SKEW_SECONDS: "${JWT_CLOCK_SKEW_SECONDS:-30}"
+      AUTH_REFRESH_TOKEN_LIFETIME: "${AUTH_REFRESH_TOKEN_LIFETIME:-7d}"
+      AUTH_LEGAL_DOCUMENTS_REVIEWED: "${AUTH_LEGAL_DOCUMENTS_REVIEWED:-false}"
+      AUTH_LEGAL_CURRENT_VERSION: "${AUTH_LEGAL_CURRENT_VERSION:-2026-08-15}"
+      AUTH_LEGAL_TERMS_URL: "${AUTH_LEGAL_TERMS_URL:-https://jobseekercopilot.com/terms}"
+      AUTH_LEGAL_PRIVACY_NOTICE_URL: "${AUTH_LEGAL_PRIVACY_NOTICE_URL:-https://jobseekercopilot.com/privacy}"
+      AUTH_LOGIN_MAXIMUM_FAILURES: "${AUTH_LOGIN_MAXIMUM_FAILURES:-10}"
+      AUTH_LOGIN_ATTEMPT_WINDOW: "${AUTH_LOGIN_ATTEMPT_WINDOW:-15m}"
+      AUTH_LOGIN_LOCK_DURATION: "${AUTH_LOGIN_LOCK_DURATION:-15m}"
+      AUTH_LOGIN_MAXIMUM_TRACKED_PRINCIPALS: "${AUTH_LOGIN_MAXIMUM_TRACKED_PRINCIPALS:-10000}"
+
+volumes:
+  auth-postgres-data:
