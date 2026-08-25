@@ -9,8 +9,11 @@ LABEL org.opencontainers.image.title="Job Seeker Copilot Authentication Service"
 
 WORKDIR /app
 
+# GnuPG is inherited build/distribution tooling, not an application runtime
+# dependency. Removing it also removes its unused SQLite/FTS dependency.
 RUN apk upgrade --no-cache \
     && apk add --no-cache curl \
+    && apk del --no-network gnupg \
     && addgroup -S -g "${APP_GID}" app \
     && adduser -S -D -H -u "${APP_UID}" -G app app
 
