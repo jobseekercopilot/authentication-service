@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
 
 @Component
 public class AccountEmailDeliveryListener {
@@ -36,8 +37,7 @@ public class AccountEmailDeliveryListener {
             log.info("Account email delivered accountId={} purpose=password-reset",
                     event.accountId());
         } catch (RuntimeException exception) {
-            log.error("Account email delivery failed accountId={} purpose=password-reset error={}",
-                    event.accountId(), exception.getClass().getSimpleName());
+            logDeliveryFailure(event.accountId(), "password-reset", exception);
         }
     }
 
@@ -48,9 +48,37 @@ public class AccountEmailDeliveryListener {
             log.info("Account email delivered accountId={} purpose=password-changed",
                     event.accountId());
         } catch (RuntimeException exception) {
-            log.error("Account email delivery failed accountId={} purpose=password-changed error={}",
-                    event.accountId(), exception.getClass().getSimpleName());
+            logDeliveryFailure(event.accountId(), "password-changed", exception);
         }
+    }
+
+    private static void logDeliveryFailure(
+            String accountId, String purpose, RuntimeException exception) {
+        if (exception instanceof AwsServiceException awsException) {
+            String errorCode = awsException.awsErrorDetails() == null
+                    ? "UNKNOWN"
+                    : safeAwsLogValue(awsException.awsErrorDetails().errorCode());
+            log.error(
+                    "Account email delivery failed accountId={} purpose={} error={} "
+                            + "awsErrorCode={} httpStatus={} requestId={}",
+                    accountId,
+                    purpose,
+                    exception.getClass().getSimpleName(),
+                    errorCode,
+                    awsException.statusCode(),
+                    safeAwsLogValue(awsException.requestId()));
+            return;
+        }
+        log.error("Account email delivery failed accountId={} purpose={} error={}",
+                accountId, purpose, exception.getClass().getSimpleName());
+    }
+
+    private static String safeAwsLogValue(String value) {
+        if (value == null || value.isBlank()) {
+            return "UNKNOWN";
+        }
+        String sanitized = value.replaceAll("[^A-Za-z0-9._:-]", "_");
+        return sanitized.substring(0, Math.min(sanitized.length(), 128));
     }
 
     private static String validateBaseUrl(String value, String deliveryMode) {
