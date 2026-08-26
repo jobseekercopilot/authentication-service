@@ -1,5 +1,11 @@
 FROM eclipse-temurin:17-jre-alpine@sha256:02320dd4ce20e243dfb915c686089cf9315c763084fafbb12d5c9993aee18b57
 
+# Refresh runtime OpenSSL to the fixed CVE-2026-14456 build.
+RUN apk add --no-cache --upgrade \
+    libcrypto3=3.5.8-r0 \
+    libssl3=3.5.8-r0 \
+    openssl=3.5.8-r0
+
 ARG APP_UID=10001
 ARG APP_GID=10001
 
